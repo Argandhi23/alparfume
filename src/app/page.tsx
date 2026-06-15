@@ -78,15 +78,6 @@ export default async function Home() {
 
         {/* Product Grid Section */}
         <section id="koleksi" className="max-w-6xl mx-auto px-6 py-24 md:py-32 scroll-mt-20 bg-brandWhite">
-          <div className="mb-16 space-y-2">
-            <span className="text-xs uppercase tracking-wide text-neutral-400 font-sans font-medium">Catalog Collection</span>
-            <h2 className="font-plus-jakarta text-3xl font-semibold text-brandBlack">
-              Koleksi Wangi
-            </h2>
-            <p className="text-sm text-neutral-500 font-light tracking-wide max-w-md font-sans leading-relaxed">
-              Pilih aroma yang mencerminkan jati diri Anda. Setiap varian dirancang menggunakan bahan berkualitas tinggi.
-            </p>
-          </div>
 
           <Suspense fallback={<ProductGridSkeleton />}>
             <ProductGrid products={products} />

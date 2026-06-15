@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
@@ -14,6 +14,10 @@ const plusJakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "AL PARFUME | Luxury Perfume Madiun",
   description: "Koleksi parfum mewah minimalis. Hubungi kami melalui WhatsApp untuk pemesanan langsung.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#ed1140",
 };
 
 export default function RootLayout({
