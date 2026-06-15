@@ -61,11 +61,8 @@ export default function ProductCard({ product }: ProductCardProps) {
           {toTitleCase(product.name)}
         </h3>
         
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-[var(--text-muted)] font-light">
-            Mulai dari
-          </span>
-          <span className="text-sm font-medium text-[var(--foreground)]">
+        <div>
+          <span className="text-sm font-semibold text-[var(--foreground)]">
             {minPrice !== null ? formatRupiah(minPrice) : "Hubungi Kami"}
           </span>
         </div>
