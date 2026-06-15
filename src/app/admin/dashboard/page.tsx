@@ -6,10 +6,12 @@ import { supabase, ProductWithVariants, OrderIntent } from "@/lib/supabase";
 import { formatRupiah } from "@/lib/whatsapp";
 import { 
   Plus, Edit2, Trash2, LogOut, Loader2, 
-  ToggleLeft, ToggleRight, X, FileText, CheckCircle2, ArrowLeft 
+  ToggleLeft, ToggleRight, X, FileText, CheckCircle2, ArrowLeft,
+  RefreshCw, Settings, ChevronLeft, ChevronRight
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import DashboardCharts from "@/components/DashboardCharts";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -20,6 +22,29 @@ export default function AdminDashboard() {
   const [products, setProducts] = useState<ProductWithVariants[]>([]);
   const [intents, setIntents] = useState<OrderIntent[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+
+  // Stats & Pagination States
+  const [statsData, setStatsData] = useState<{ date: string; sales: number; revenue: number }[]>([]);
+  const [intentsPage, setIntentsPage] = useState(1);
+  const [intentsLimit] = useState(10);
+  const [totalIntentsCount, setTotalIntentsCount] = useState(0);
+
+  // Checkbox multi-select states
+  const [selectedIntentIds, setSelectedIntentIds] = useState<string[]>([]);
+
+  // Settings Credentials States
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [settingsEmail, setSettingsEmail] = useState("");
+  const [settingsPassword, setSettingsPassword] = useState("");
+  const [settingsConfirmPassword, setSettingsConfirmPassword] = useState("");
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSuccess, setSettingsSuccess] = useState("");
+
+  // Delete Intents States
+  const [deleteIntentTargetIds, setDeleteIntentTargetIds] = useState<string[]>([]);
+  const [isDeleteIntentModalOpen, setIsDeleteIntentModalOpen] = useState(false);
+  const [deletingIntent, setDeletingIntent] = useState(false);
 
   // Form Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -60,35 +85,165 @@ export default function AdminDashboard() {
     checkSession();
   }, [router]);
 
-  const fetchData = async () => {
-    setLoadingData(true);
+  const fetchProducts = async () => {
     try {
       const { data: productsData, error: productsError } = await supabase
         .from("products")
         .select("*, product_variants(*)")
         .order("created_at", { ascending: false });
-
       if (productsError) throw productsError;
-
-      const { data: intentsData, error: intentsError } = await supabase
-        .from("order_intents")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (intentsError) throw intentsError;
-
       setProducts(productsData || []);
-      setIntents(intentsData || []);
     } catch (err) {
-      console.error("Gagal mengambil data dari database:", err);
+      console.error("Gagal mengambil data produk:", err);
+    }
+  };
+
+  const fetchIntents = async (page: number) => {
+    setLoadingData(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`/api/admin/intents?page=${page}&limit=${intentsLimit}`, {
+        headers: {
+          Authorization: `Bearer ${token || ""}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch intents: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      setIntents(result.data || []);
+      setTotalIntentsCount(result.totalCount || 0);
+      setIntentsPage(page);
+      setSelectedIntentIds([]); // Clear selection when page changes
+    } catch (err) {
+      console.error("Gagal mengambil data riwayat pesanan:", err);
     } finally {
       setLoadingData(false);
     }
   };
 
+  const fetchStats = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch("/api/admin/stats", {
+        headers: {
+          Authorization: `Bearer ${token || ""}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch stats: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setStatsData(data || []);
+    } catch (err) {
+      console.error("Gagal mengambil data statistik:", err);
+    }
+  };
+
+  const fetchData = async () => {
+    setLoadingData(true);
+    await Promise.all([fetchProducts(), fetchIntents(1), fetchStats()]);
+    setLoadingData(false);
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.replace("/admin/login");
+  };
+
+  const openSettingsModal = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setSettingsEmail(session?.user?.email || "");
+    setSettingsPassword("");
+    setSettingsConfirmPassword("");
+    setSettingsError("");
+    setSettingsSuccess("");
+    setIsSettingsModalOpen(true);
+  };
+
+  const handleUpdateCredentials = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsError("");
+    setSettingsSuccess("");
+
+    if (!settingsEmail.trim() && !settingsPassword.trim()) {
+      setSettingsError("Masukkan email baru atau password baru.");
+      return;
+    }
+
+    if (settingsPassword && settingsPassword !== settingsConfirmPassword) {
+      setSettingsError("Konfirmasi password tidak cocok.");
+      return;
+    }
+
+    setSettingsLoading(true);
+    try {
+      const updateData: { email?: string; password?: string } = {};
+      if (settingsEmail.trim()) {
+        updateData.email = settingsEmail.trim();
+      }
+      if (settingsPassword.trim()) {
+        updateData.password = settingsPassword.trim();
+      }
+
+      const { error } = await supabase.auth.updateUser(updateData);
+      if (error) throw error;
+
+      setSettingsSuccess("Kredensial berhasil diperbarui!");
+      setSettingsPassword("");
+      setSettingsConfirmPassword("");
+    } catch (err) {
+      console.error("Gagal memperbarui kredensial:", err);
+      const msg = err instanceof Error ? err.message : "Gagal memperbarui kredensial.";
+      setSettingsError(msg);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const handleDeleteIntents = async () => {
+    if (deleteIntentTargetIds.length === 0) return;
+    setDeletingIntent(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch("/api/admin/intents", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token || ""}`,
+        },
+        body: JSON.stringify({ ids: deleteIntentTargetIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete intents: ${response.statusText}`);
+      }
+
+      // Clear selections and refresh
+      setSelectedIntentIds([]);
+      setIsDeleteIntentModalOpen(false);
+      
+      const remainingOnPage = intents.length - deleteIntentTargetIds.length;
+      const targetPage = remainingOnPage === 0 && intentsPage > 1 ? intentsPage - 1 : intentsPage;
+      
+      await Promise.all([fetchIntents(targetPage), fetchStats()]);
+    } catch (err) {
+      console.error("Gagal menghapus riwayat pesanan:", err);
+      alert("Gagal menghapus riwayat pesanan. Silakan coba lagi.");
+    } finally {
+      setDeletingIntent(false);
+      setDeleteIntentTargetIds([]);
+    }
   };
 
   const generateSlug = (name: string) => {
@@ -401,6 +556,30 @@ export default function AdminDashboard() {
     if (!deleteTargetId) return;
     setDeleting(true);
     try {
+      // Clean up product images in storage before deleting the database rows
+      const targetProduct = products.find((p) => p.id === deleteTargetId);
+      if (targetProduct && targetProduct.image_url) {
+        let urls: string[] = [];
+        if (targetProduct.image_url.startsWith("[")) {
+          try {
+            urls = JSON.parse(targetProduct.image_url);
+          } catch {
+            urls = [targetProduct.image_url];
+          }
+        } else {
+          urls = [targetProduct.image_url];
+        }
+
+        const pathsToDelete = urls
+          .filter(Boolean)
+          .map((url) => getStoragePathFromUrl(url))
+          .filter((path): path is string => !!path);
+
+        if (pathsToDelete.length > 0) {
+          await supabase.storage.from("product-images").remove(pathsToDelete);
+        }
+      }
+
       const { error: delVarError } = await supabase
         .from("product_variants")
         .delete()
@@ -422,6 +601,25 @@ export default function AdminDashboard() {
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleCloseModal = async () => {
+    // Clean up uploaded images in storage if we cancel adding a new product
+    if (modalType === "add") {
+      const pathsToDelete = formImages
+        .filter((url): url is string => !!url)
+        .map((url) => getStoragePathFromUrl(url))
+        .filter((path): path is string => !!path);
+
+      if (pathsToDelete.length > 0) {
+        try {
+          await supabase.storage.from("product-images").remove(pathsToDelete);
+        } catch (err) {
+          console.error("Gagal membersihkan gambar yang batal disimpan:", err);
+        }
+      }
+    }
+    setIsModalOpen(false);
   };
 
   const toggleProductStatus = async (product: ProductWithVariants) => {
@@ -449,6 +647,10 @@ export default function AdminDashboard() {
     );
   }
 
+  const totalRevenue = statsData.reduce((sum, item) => sum + item.revenue, 0);
+  const totalSalesCount = statsData.reduce((sum, item) => sum + item.sales, 0);
+  const activeProductsCount = products.filter((p) => p.is_active).length;
+
   return (
     <div className="min-h-screen bg-white text-neutral-900 font-sans pb-24">
       {/* Header */}
@@ -457,7 +659,14 @@ export default function AdminDashboard() {
           <div className="flex items-center space-x-3">
             <span className="font-plus-jakarta text-lg font-semibold text-neutral-900">Al Parfume Admin</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={openSettingsModal}
+              className="flex items-center gap-2 border border-neutral-200 px-5 py-2 text-xs uppercase tracking-wider font-medium rounded-full transition-colors duration-200 text-neutral-700 bg-white hover:bg-neutral-50 font-sans shadow-sm"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              Pengaturan Akun
+            </button>
             <Link
               href="/"
               className="flex items-center gap-2 border border-neutral-200 px-5 py-2 text-xs uppercase tracking-wider font-medium rounded-full transition-colors duration-200 text-neutral-700 bg-white hover:bg-neutral-50 font-sans shadow-sm"
@@ -478,10 +687,32 @@ export default function AdminDashboard() {
 
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-6 mt-12">
+        {/* Ringkasan Bisnis */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6 font-sans">
+          <div className="border border-neutral-100 bg-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-medium">Total Volume Penjualan (30 Hari)</span>
+            <span className="text-2xl font-bold font-plus-jakarta text-neutral-900 mt-2">{totalSalesCount} Pesanan</span>
+          </div>
+          <div className="border border-neutral-100 bg-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-medium">Total Pendapatan (30 Hari)</span>
+            <span className="text-2xl font-bold font-plus-jakarta text-emerald-600 mt-2">{formatRupiah(totalRevenue)}</span>
+          </div>
+          <div className="border border-neutral-100 bg-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-medium">Produk Aktif</span>
+            <span className="text-2xl font-bold font-plus-jakarta text-neutral-900 mt-2">{activeProductsCount} Produk</span>
+          </div>
+        </div>
+
+        {/* Charts */}
+        <DashboardCharts data={statsData} />
+
         {/* Navigation Tabs */}
         <div className="flex border-b border-neutral-100 mb-8">
           <button
-            onClick={() => setActiveTab("products")}
+            onClick={() => {
+              setActiveTab("products");
+              fetchData();
+            }}
             className={`flex items-center gap-2 px-6 py-3.5 text-xs uppercase tracking-widest border-b-2 transition-all font-medium font-sans ${
               activeTab === "products"
                 ? "border-black text-black"
@@ -492,7 +723,10 @@ export default function AdminDashboard() {
             Kelola Produk ({products.length})
           </button>
           <button
-            onClick={() => setActiveTab("intents")}
+            onClick={() => {
+              setActiveTab("intents");
+              fetchData();
+            }}
             className={`flex items-center gap-2 px-6 py-3.5 text-xs uppercase tracking-widest border-b-2 transition-all font-medium font-sans ${
               activeTab === "intents"
                 ? "border-black text-black"
@@ -641,9 +875,33 @@ export default function AdminDashboard() {
         {/* Tab content 2: Order Intents History */}
         {activeTab === "intents" && (
           <div className="space-y-6">
-            <div className="space-y-1">
-              <h2 className="text-xl font-bold font-plus-jakarta text-neutral-900">Riwayat Klik WhatsApp</h2>
-              <p className="text-xs text-neutral-500 font-sans">Melihat daftar produk yang diminati pelanggan sebelum menuju WhatsApp</p>
+            <div className="flex justify-between items-center">
+              <div className="space-y-1">
+                <h2 className="text-xl font-bold font-plus-jakarta text-neutral-900">Riwayat Klik WhatsApp</h2>
+                <p className="text-xs text-neutral-500 font-sans">Melihat daftar produk yang diminati pelanggan sebelum menuju WhatsApp</p>
+              </div>
+              <div className="flex items-center gap-3">
+                {selectedIntentIds.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setDeleteIntentTargetIds(selectedIntentIds);
+                      setIsDeleteIntentModalOpen(true);
+                    }}
+                    className="bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-all duration-200 font-sans shadow-sm"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Hapus Terpilih ({selectedIntentIds.length})
+                  </button>
+                )}
+                <button
+                  onClick={() => fetchIntents(intentsPage)}
+                  disabled={loadingData}
+                  className="border border-neutral-200 hover:bg-neutral-50 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-all duration-200 font-sans bg-white text-neutral-700 shadow-sm"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? "animate-spin" : ""}`} />
+                  {loadingData ? "Memuat..." : "Segarkan"}
+                </button>
+              </div>
             </div>
 
             {loadingData ? (
@@ -656,81 +914,169 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <div className="border border-neutral-100 bg-white rounded-2xl overflow-hidden shadow-sm">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-neutral-100 bg-neutral-50 text-neutral-400 tracking-wider uppercase font-semibold text-[10px] font-sans">
-                      <th className="py-4 px-6">Tanggal & Waktu</th>
-                      <th className="py-4 px-6">Pelanggan</th>
-                      <th className="py-4 px-6">WhatsApp</th>
-                      <th className="py-4 px-6">Alamat COD</th>
-                      <th className="py-4 px-6">Detail Pesanan</th>
-                      <th className="py-4 px-6">Catatan</th>
-                      <th className="py-4 px-6">Total Harga</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {intents.map((int) => {
-                      let items = [];
-                      if (int.items_json) {
-                        try {
-                          items = JSON.parse(int.items_json);
-                        } catch (e) {
-                          console.error("Failed to parse items_json", e);
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-neutral-100 bg-neutral-50 text-neutral-400 tracking-wider uppercase font-semibold text-[10px] font-sans">
+                        <th className="py-4 px-4 w-12 text-center">
+                          <input
+                            type="checkbox"
+                            checked={intents.length > 0 && selectedIntentIds.length === intents.length}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedIntentIds(intents.map((int) => int.id.toString()));
+                              } else {
+                                setSelectedIntentIds([]);
+                              }
+                            }}
+                            className="rounded border-neutral-300 text-black focus:ring-black h-4 w-4 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-4 px-6">Tanggal & Waktu</th>
+                        <th className="py-4 px-6">Pelanggan</th>
+                        <th className="py-4 px-6">WhatsApp</th>
+                        <th className="py-4 px-6">Alamat COD</th>
+                        <th className="py-4 px-6">Detail Pesanan</th>
+                        <th className="py-4 px-6">Catatan</th>
+                        <th className="py-4 px-6">Total Harga</th>
+                        <th className="py-4 px-6 text-right w-16">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {intents.map((int) => {
+                        let items = [];
+                        if (int.items_json) {
+                          try {
+                            items = JSON.parse(int.items_json);
+                          } catch (e) {
+                            console.error("Failed to parse items_json", e);
+                          }
                         }
-                      }
-                      
-                      return (
-                        <tr key={int.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 text-xs">
-                          <td className="py-4 px-6 font-mono text-[10px] text-neutral-500 whitespace-nowrap">
-                            {new Date(int.created_at).toLocaleString("id-ID", {
-                              dateStyle: "medium",
-                              timeStyle: "short"
-                            })}
-                          </td>
-                          <td className="py-4 px-6 font-semibold text-neutral-900 font-sans">
-                            {int.customer_name || "-"}
-                          </td>
-                          <td className="py-4 px-6 text-neutral-600 font-sans">
-                            {int.customer_wa ? (
-                              <a
-                                href={`https://wa.me/${int.customer_wa}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="underline hover:text-black"
+                        
+                        return (
+                          <tr key={int.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 text-xs">
+                            <td className="py-4 px-4 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedIntentIds.includes(int.id.toString())}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedIntentIds([...selectedIntentIds, int.id.toString()]);
+                                  } else {
+                                    setSelectedIntentIds(selectedIntentIds.filter((id) => id !== int.id.toString()));
+                                  }
+                                }}
+                                className="rounded border-neutral-300 text-black focus:ring-black h-4 w-4 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-4 px-6 font-mono text-[10px] text-neutral-500 whitespace-nowrap">
+                              {new Date(int.created_at).toLocaleString("id-ID", {
+                                dateStyle: "medium",
+                                timeStyle: "short"
+                              })}
+                            </td>
+                            <td className="py-4 px-6 font-semibold text-neutral-900 font-sans">
+                              {int.customer_name || "-"}
+                            </td>
+                            <td className="py-4 px-6 text-neutral-600 font-sans">
+                              {int.customer_wa ? (
+                                <a
+                                  href={`https://wa.me/${int.customer_wa}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="underline hover:text-black"
+                                >
+                                  {int.customer_wa}
+                                </a>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-neutral-600 font-sans max-w-xs truncate" title={int.customer_address || ""}>
+                              {int.customer_address || "-"}
+                            </td>
+                            <td className="py-4 px-6 text-neutral-700 font-sans">
+                              {items.length > 0 ? (
+                                <ul className="list-disc pl-4 space-y-0.5">
+                                  {items.map((item: { productName: string; sizeMl: number; quantity: number }, idx: number) => (
+                                    <li key={idx}>
+                                      {item.productName} ({item.sizeMl}ml) × {item.quantity}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <span>{int.product_name} ({int.size_ml}ml)</span>
+                              )}
+                            </td>
+                            <td className="py-4 px-6 text-neutral-500 italic max-w-xs truncate font-sans" title={int.order_notes || ""}>
+                              {int.order_notes || "-"}
+                            </td>
+                            <td className="py-4 px-6 text-neutral-900 font-semibold font-sans whitespace-nowrap">
+                              {formatRupiah(int.price)}
+                            </td>
+                            <td className="py-4 px-6 text-right">
+                              <button
+                                onClick={() => {
+                                  setDeleteIntentTargetIds([int.id.toString()]);
+                                  setIsDeleteIntentModalOpen(true);
+                                }}
+                                className="text-neutral-400 hover:text-red-600 transition-colors p-1.5 hover:bg-neutral-50 rounded-full"
+                                title="Hapus"
                               >
-                                {int.customer_wa}
-                              </a>
-                            ) : (
-                              "-"
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-neutral-600 font-sans max-w-xs truncate" title={int.customer_address || ""}>
-                            {int.customer_address || "-"}
-                          </td>
-                          <td className="py-4 px-6 text-neutral-700 font-sans">
-                            {items.length > 0 ? (
-                              <ul className="list-disc pl-4 space-y-0.5">
-                                {items.map((item: { productName: string; sizeMl: number; quantity: number }, idx: number) => (
-                                  <li key={idx}>
-                                    {item.productName} ({item.sizeMl}ml) × {item.quantity}
-                                  </li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <span>{int.product_name} ({int.size_ml}ml)</span>
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-neutral-500 italic max-w-xs truncate font-sans" title={int.order_notes || ""}>
-                            {int.order_notes || "-"}
-                          </td>
-                          <td className="py-4 px-6 text-neutral-900 font-semibold font-sans whitespace-nowrap">
-                            {formatRupiah(int.price)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {totalIntentsCount > intentsLimit && (
+                  <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-100 bg-neutral-50/50">
+                    <div className="text-xs text-neutral-500">
+                      Menampilkan <span className="font-medium">{(intentsPage - 1) * intentsLimit + 1}</span> sampai{" "}
+                      <span className="font-medium">{Math.min(intentsPage * intentsLimit, totalIntentsCount)}</span> dari{" "}
+                      <span className="font-medium">{totalIntentsCount}</span> pesanan
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => fetchIntents(intentsPage - 1)}
+                        disabled={intentsPage === 1 || loadingData}
+                        className="border border-neutral-200 hover:bg-neutral-50 p-2 rounded-lg text-neutral-700 bg-white disabled:opacity-50 disabled:pointer-events-none transition-colors"
+                        title="Sebelumnya"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      
+                      {Array.from({ length: Math.ceil(totalIntentsCount / intentsLimit) }, (_, i) => i + 1).map((p) => (
+                        <button
+                          key={p}
+                          onClick={() => fetchIntents(p)}
+                          disabled={loadingData}
+                          className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-colors ${
+                            p === intentsPage
+                              ? "bg-black text-white"
+                              : "border border-neutral-200 hover:bg-neutral-50 bg-white text-neutral-700"
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+
+                      <button
+                        onClick={() => fetchIntents(intentsPage + 1)}
+                        disabled={intentsPage === Math.ceil(totalIntentsCount / intentsLimit) || loadingData}
+                        className="border border-neutral-200 hover:bg-neutral-50 p-2 rounded-lg text-neutral-700 bg-white disabled:opacity-50 disabled:pointer-events-none transition-colors"
+                        title="Berikutnya"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -777,7 +1123,7 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="w-full max-w-2xl border border-neutral-100 bg-white rounded-2xl p-8 space-y-6 max-h-[90vh] overflow-y-auto relative my-8 shadow-xl">
             <button
-              onClick={() => setIsModalOpen(false)}
+              onClick={handleCloseModal}
               className="absolute top-6 right-6 text-neutral-400 hover:text-black rounded-full p-1 hover:bg-neutral-50 transition-colors"
             >
               <X className="w-5 h-5" />
@@ -1045,7 +1391,7 @@ export default function AdminDashboard() {
               <div className="flex gap-4 pt-4 border-t border-neutral-100">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={handleCloseModal}
                   disabled={saving || slotStatuses.includes("uploading")}
                   className="flex-1 border border-neutral-200 hover:border-neutral-300 text-neutral-700 py-3 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors bg-white font-sans"
                 >
@@ -1067,6 +1413,154 @@ export default function AdminDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ACCOUNT SETTINGS MODAL */}
+      {isSettingsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md bg-white border border-neutral-100 p-8 shadow-xl relative animate-slide-up rounded-2xl text-xs">
+            <button
+              onClick={() => setIsSettingsModalOpen(false)}
+              className="absolute top-6 right-6 text-neutral-400 hover:text-black transition-colors p-1.5 hover:bg-neutral-50 rounded-full"
+              aria-label="Tutup"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="space-y-2 mb-6">
+              <h3 className="font-plus-jakarta text-xl font-bold text-neutral-900">
+                Pengaturan Akun Admin
+              </h3>
+              <p className="text-xs text-neutral-400 font-sans">
+                Ubah email login dan password untuk akun admin Anda.
+              </p>
+            </div>
+
+            <form onSubmit={handleUpdateCredentials} className="space-y-5">
+              {settingsError && (
+                <div className="border border-red-100 bg-red-50 p-3 rounded-lg text-xs text-center text-red-700 font-sans">
+                  {settingsError}
+                </div>
+              )}
+              {settingsSuccess && (
+                <div className="border border-green-100 bg-green-50 p-3 rounded-lg text-xs text-center text-green-700 font-sans">
+                  {settingsSuccess}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest text-neutral-400 block font-semibold font-sans">
+                  Alamat Email Baru
+                </label>
+                <input
+                  type="email"
+                  value={settingsEmail}
+                  onChange={(e) => setSettingsEmail(e.target.value)}
+                  className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black transition-colors font-sans text-neutral-800"
+                  placeholder="admin@alparfume.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-widest text-neutral-400 block font-semibold font-sans">
+                  Password Baru (Kosongkan jika tidak ingin diubah)
+                </label>
+                <input
+                  type="password"
+                  value={settingsPassword}
+                  onChange={(e) => setSettingsPassword(e.target.value)}
+                  className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black transition-colors font-sans text-neutral-800"
+                  placeholder="••••••••"
+                  minLength={6}
+                />
+              </div>
+
+              {settingsPassword.trim() !== "" && (
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-widest text-neutral-400 block font-semibold font-sans">
+                    Konfirmasi Password Baru
+                  </label>
+                  <input
+                    type="password"
+                    value={settingsConfirmPassword}
+                    onChange={(e) => setSettingsConfirmPassword(e.target.value)}
+                    className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-black transition-colors font-sans text-neutral-800"
+                    placeholder="••••••••"
+                  />
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end gap-3 font-sans">
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsModalOpen(false)}
+                  className="border border-neutral-200 hover:bg-neutral-50 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold text-neutral-600 transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={settingsLoading}
+                  className="bg-black text-white hover:bg-neutral-800 disabled:opacity-50 px-6 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors flex items-center gap-2"
+                >
+                  {settingsLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Menyimpan...
+                    </>
+                  ) : (
+                    "Simpan Perubahan"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE INTENTS CONFIRMATION MODAL */}
+      {isDeleteIntentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm border border-neutral-100 rounded-2xl bg-white p-6 space-y-6 shadow-sm animate-slide-up relative text-xs">
+            <div className="space-y-2">
+              <h3 className="font-plus-jakarta text-lg font-bold text-neutral-900 leading-tight">
+                Hapus Riwayat Pesanan?
+              </h3>
+              <p className="text-xs text-neutral-400 font-sans leading-relaxed">
+                Apakah Anda yakin ingin menghapus {deleteIntentTargetIds.length} riwayat pesanan yang dipilih? Tindakan ini tidak dapat dibatalkan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 font-sans">
+              <button
+                type="button"
+                disabled={deletingIntent}
+                onClick={() => {
+                  setIsDeleteIntentModalOpen(false);
+                  setDeleteIntentTargetIds([]);
+                }}
+                className="border border-neutral-200 hover:bg-neutral-50 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors text-neutral-600 disabled:opacity-50"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={deletingIntent}
+                onClick={handleDeleteIntents}
+                className="bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors flex items-center gap-2"
+              >
+                {deletingIntent ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Menghapus...
+                  </>
+                ) : (
+                  "Hapus"
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

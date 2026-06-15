@@ -49,8 +49,8 @@ export default async function Home() {
             />
 
             <div className="space-y-4">
-              <h1 className="text-4xl md:text-6xl font-bold text-brandBlack leading-tight tracking-tight max-w-2xl mx-auto">
-                Wangi yang Bicara Sendiri.
+              <h1 className="text-4xl md:text-5xl font-bold text-brandBlack leading-tight tracking-tight max-w-3xl mx-auto">
+                Sebuah aroma untuk setiap momen sebuah kenangan untuk setiap aroma
               </h1>
               <p className="text-base text-neutral-500 font-normal max-w-md mx-auto leading-relaxed">
                 Temukan aroma yang mencerminkan siapa dirimu.
