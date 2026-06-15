@@ -12,7 +12,7 @@ const plusJakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "AL PARFUME | Luxury Perfume Madiun",
+  title: "AL PARFUME Madiun",
   description: "Koleksi parfum mewah minimalis. Hubungi kami melalui WhatsApp untuk pemesanan langsung.",
 };
 
