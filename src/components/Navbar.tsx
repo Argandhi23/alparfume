@@ -1,12 +1,12 @@
 "use client";
-
+ 
 import Link from "next/link";
+import Image from "next/image";
 import { Menu, X, Sun, Moon, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { useCart } from "@/context/CartContext";
 import CartDrawer from "./CartDrawer";
-import Logo from "./Logo";
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -37,11 +37,15 @@ export default function Navbar() {
         }}
       >
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
-          <Link
-            href="/"
-            className="hover:opacity-80 transition-opacity"
-          >
-            <Logo horizontal />
+          <Link href="/">
+            <Image
+              src="/logo.png"
+              alt="Al Parfume"
+              width={120}
+              height={40}
+              className="h-7 md:h-8 w-auto object-contain logo-img"
+              priority
+            />
           </Link>
 
           <div className="flex items-center space-x-6 md:space-x-8">

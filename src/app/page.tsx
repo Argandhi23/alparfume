@@ -5,7 +5,7 @@ import Footer from "@/components/Footer";
 import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import Logo from "@/components/Logo";
+import Image from "next/image";
 
 export const revalidate = 0;
 
@@ -38,26 +38,29 @@ export default async function Home() {
       <main className="flex-grow">
         {/* Full-screen Hero Section */}
         <section className="relative min-h-screen flex flex-col justify-center items-center px-6 text-center bg-brandWhite overflow-hidden">
-          <div className="relative z-10 space-y-10 max-w-4xl -mt-16 flex flex-col items-center animate-slide-up">
-            {/* Elegant brand symbol/logo in Hero (scaled down for luxury look) */}
-            <Logo className="scale-[0.85] md:scale-95 opacity-90" />
-            
-            {/* Editorial vertical line divider */}
-            <div className="w-[1px] h-12 bg-brandBorder/80" />
+          <div className="relative z-10 space-y-6 max-w-4xl -mt-16 flex flex-col items-center animate-slide-up">
+            <Image
+              src="/logo.png"
+              alt="Al Parfume"  
+              width={180}
+              height={60}
+              className="h-14 w-auto object-contain mx-auto mb-6 logo-img"
+              priority
+            />
 
             <div className="space-y-4">
               <h1 className="text-4xl md:text-6xl font-bold text-brandBlack leading-tight tracking-tight max-w-2xl mx-auto">
                 Wangi yang Bicara Sendiri.
               </h1>
-              <p className="text-xs md:text-sm text-brandMuted uppercase tracking-[0.2em] font-light max-w-md mx-auto leading-relaxed">
+              <p className="text-base text-neutral-500 font-normal max-w-md mx-auto leading-relaxed">
                 Temukan aroma yang mencerminkan siapa dirimu.
               </p>
             </div>
             
-            <div className="pt-2">
+            <div className="pt-4">
               <Link
                 href="#koleksi"
-                className="inline-block bg-brandBlack text-brandWhite text-xs uppercase tracking-widest font-semibold px-8 py-4 rounded-full hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-sm"
+                className="inline-block bg-brandBlack text-brandWhite text-sm font-medium px-8 py-3.5 rounded-full hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 shadow-sm"
               >
                 Jelajahi Koleksi
               </Link>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { ShoppingBag } from "lucide-react";
 
 export default function Footer() {
@@ -7,9 +8,13 @@ export default function Footer() {
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
         {/* Column 1: Brand Block */}
         <div className="space-y-4">
-          <h3 className="font-plus-jakarta text-lg font-semibold text-brandBlack">
-            Al Parfume
-          </h3>
+          <Image
+            src="/logo.png"
+            alt="Al Parfume"
+            width={100}
+            height={34}
+            className="h-8 w-auto object-contain mb-3 logo-img"
+          />
           <p className="text-xs leading-relaxed max-w-xs font-light text-neutral-400 font-sans">
             Sentuhan kemewahan aromatik terbaik. Dirancang dengan presisi untuk mendampingi setiap langkah Anda.
           </p>
