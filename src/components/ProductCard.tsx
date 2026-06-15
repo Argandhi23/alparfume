@@ -38,7 +38,7 @@ export default function ProductCard({ product }: ProductCardProps) {
   return (
     <Link 
       href={`/products/${product.slug}`} 
-      className="group block bg-brandWhite rounded-2xl overflow-hidden hover:-translate-y-1 hover:scale-[1.01] shadow-sm hover:shadow-lg transition-all duration-500 ease-out relative no-underline border border-brandBorder/40"
+      className="group flex flex-col h-full bg-brandWhite rounded-2xl overflow-hidden hover:-translate-y-1 hover:scale-[1.01] shadow-sm hover:shadow-lg transition-all duration-500 ease-out relative no-underline border border-brandBorder/40"
     >
       <div className="relative aspect-square w-full bg-[var(--background-secondary)] overflow-hidden">
         {displayImage ? (
@@ -56,7 +56,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         )}
       </div>
       
-      <div className="p-5 pt-4 space-y-2">
+      <div className="p-5 pt-4 flex-grow flex flex-col justify-between gap-3">
         <h3 className="text-base font-semibold text-brandBlack tracking-tight">
           {toTitleCase(product.name)}
         </h3>
