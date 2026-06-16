@@ -40,14 +40,55 @@ export async function generateMetadata({ params }: ProductPageProps) {
   
   if (!product) {
     return {
-      title: "Produk Tidak Ditemukan | AL PARFUME",
+      title: "Produk Tidak Ditemukan",
       description: "Halaman produk AL PARFUME tidak ditemukan.",
     };
   }
 
+  // Parse images JSON array to get the first image for OG if it exists
+  let firstImageUrl = "/logo.png";
+  if (product.image_url) {
+    if (product.image_url.startsWith("[")) {
+      try {
+        const imageList = JSON.parse(product.image_url);
+        if (imageList && imageList.length > 0) {
+          firstImageUrl = imageList[0];
+        }
+      } catch {
+        firstImageUrl = product.image_url;
+      }
+    } else {
+      firstImageUrl = product.image_url;
+    }
+  }
+
+  const title = product.name;
+  const description = product.description || `Beli ${product.name} dari AL PARFUME. Parfum mewah, minimalis, dan tahan lama dengan notes terbaik.`;
+
   return {
-    title: `${product.name} | AL PARFUME`,
-    description: product.description,
+    title: title,
+    description: description,
+    alternates: {
+      canonical: `https://alparfume.store/products/${product.slug}`,
+    },
+    openGraph: {
+      title: `${title} | AL PARFUME`,
+      description: description,
+      url: `https://alparfume.store/products/${product.slug}`,
+      type: "website",
+      images: [
+        {
+          url: firstImageUrl,
+          alt: `${title} - AL PARFUME`,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${title} | AL PARFUME`,
+      description: description,
+      images: [firstImageUrl],
+    },
   };
 }
 
