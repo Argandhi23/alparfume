@@ -56,6 +56,19 @@ export default function OrderFormModal({
     e.preventDefault();
     if (!validate()) return;
 
+    // Detect mobile or Safari to decide redirection method
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    );
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const useRedirect = isMobile || isSafari;
+
+    let newWindow: Window | null = null;
+    if (!useRedirect) {
+      // Synchronously open a blank window for desktop non-Safari to bypass popup blocker
+      newWindow = window.open("", "_blank");
+    }
+
     setLoading(true);
 
     try {
@@ -101,9 +114,17 @@ export default function OrderFormModal({
       }
 
       onClose();
+
       // Redirect to WhatsApp
-      window.open(waUrl, "_blank");
+      if (newWindow) {
+        newWindow.location.href = waUrl;
+      } else {
+        window.location.href = waUrl;
+      }
     } catch (err) {
+      if (newWindow) {
+        newWindow.close();
+      }
       console.error("Failed to submit order:", err);
       alert("Gagal memproses pesanan. Silakan coba lagi.");
     } finally {
