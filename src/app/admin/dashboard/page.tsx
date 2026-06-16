@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase, ProductWithVariants, OrderIntent } from "@/lib/supabase";
 import { formatRupiah } from "@/lib/whatsapp";
@@ -67,22 +67,136 @@ export default function AdminDashboard() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
+  // Image Crop States
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+  const [cropTargetIndex, setCropTargetIndex] = useState<number>(0);
+  const [zoom, setZoom] = useState(1);
+  const [position, setPosition] = useState({ x: 160, y: 160 });
+  const [dimensions, setDimensions] = useState({ width: 320, height: 320 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const imageRef = useRef<HTMLImageElement | null>(null);
+
+  const handleFileSelect = (index: number, file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropImageSrc(reader.result as string);
+      setCropTargetIndex(index);
+      setIsCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    const containerSize = 320;
+    const ar = img.naturalWidth / img.naturalHeight;
+    let width = containerSize;
+    let height = containerSize;
+    if (ar > 1) {
+      width = containerSize * ar;
+    } else {
+      height = containerSize / ar;
+    }
+    setDimensions({ width, height });
+    setPosition({ x: containerSize / 2, y: containerSize / 2 });
+    setZoom(1);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+    setPosition((prev) => ({
+      x: prev.x + dx,
+      y: prev.y + dy,
+    }));
+    setDragStart({ x: e.clientX, y: e.clientY });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - dragStart.x;
+    const dy = e.touches[0].clientY - dragStart.y;
+    setPosition((prev) => ({
+      x: prev.x + dx,
+      y: prev.y + dy,
+    }));
+    setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const handleCropSave = () => {
+    if (!imageRef.current) return;
+    const canvas = document.createElement("canvas");
+    const size = 800; // Output image size (High resolution 800x800 square for crystal clear display)
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Calculate scaling factor between 320px crop area and 800px output canvas
+    const scale = size / 320;
+    
+    // Relative position calculation
+    const dx = (position.x - (dimensions.width * zoom) / 2) * scale;
+    const dy = (position.y - (dimensions.height * zoom) / 2) * scale;
+    const dw = (dimensions.width * zoom) * scale;
+    const dh = (dimensions.height * zoom) * scale;
+
+    // Draw background color and image
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(imageRef.current, dx, dy, dw, dh);
+
+    // Convert to compressed jpeg at 0.90 quality for high-fidelity rendering without large payload size
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const croppedFile = new File([blob], `cropped-${Date.now()}.jpg`, { type: "image/jpeg" });
+      handleSlotUpload(cropTargetIndex, croppedFile);
+      setIsCropModalOpen(false);
+    }, "image/jpeg", 0.90);
+  };
+
   // Delete State
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Check Session
+  // Check Session & Auth Listeners
   useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!session) {
         router.replace("/admin/login");
       } else {
         setLoadingSession(false);
         fetchData();
       }
+    });
+    return () => {
+      subscription.unsubscribe();
     };
-    checkSession();
   }, [router]);
 
   const fetchProducts = async () => {
@@ -1277,7 +1391,7 @@ export default function AdminDashboard() {
                                   accept="image/*"
                                   onChange={(e) => {
                                     if (e.target.files && e.target.files[0]) {
-                                      handleSlotUpload(index, e.target.files[0]);
+                                      handleFileSelect(index, e.target.files[0]);
                                     }
                                   }}
                                   className="absolute inset-0 opacity-0 cursor-pointer"
@@ -1314,7 +1428,7 @@ export default function AdminDashboard() {
                                   accept="image/*"
                                   onChange={(e) => {
                                     if (e.target.files && e.target.files[0]) {
-                                      handleSlotUpload(index, e.target.files[0]);
+                                      handleFileSelect(index, e.target.files[0]);
                                     }
                                   }}
                                   className="absolute inset-0 opacity-0 cursor-pointer"
@@ -1523,7 +1637,7 @@ export default function AdminDashboard() {
       {/* DELETE INTENTS CONFIRMATION MODAL */}
       {isDeleteIntentModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-sm border border-neutral-100 rounded-2xl bg-white p-6 space-y-6 shadow-sm animate-slide-up relative text-xs">
+          <div className="w-full max-w-sm border border-neutral-100 rounded-2xl bg-white p-6 space-y-6 shadow-sm animate-slide-up relative text-xs font-sans">
             <div className="space-y-2">
               <h3 className="font-plus-jakarta text-lg font-bold text-neutral-900 leading-tight">
                 Hapus Riwayat Pesanan?
@@ -1559,6 +1673,95 @@ export default function AdminDashboard() {
                 ) : (
                   "Hapus"
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IMAGE CROP MODAL */}
+      {isCropModalOpen && cropImageSrc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md border border-neutral-800 rounded-2xl bg-neutral-900 p-6 space-y-6 shadow-xl animate-slide-up relative text-xs text-white">
+            <div className="space-y-2">
+              <h3 className="font-plus-jakarta text-lg font-bold text-white leading-tight">
+                Crop Foto Produk
+              </h3>
+              <p className="text-xs text-neutral-400 font-sans leading-relaxed">
+                Geser (drag) gambar untuk menyesuaikan posisi. Gunakan slider di bawah untuk zoom.
+              </p>
+            </div>
+
+            {/* Cropping Canvas Viewport */}
+            <div className="flex justify-center py-2">
+              <div 
+                className="w-[320px] h-[320px] relative overflow-hidden bg-neutral-950 border border-neutral-700 rounded-xl select-none cursor-move"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+              >
+                {/* Image element being cropped */}
+                <img
+                  ref={imageRef}
+                  src={cropImageSrc}
+                  alt="Target crop"
+                  className="pointer-events-none select-none max-w-none max-h-none"
+                  style={{
+                    position: "absolute",
+                    left: `${position.x}px`,
+                    top: `${position.y}px`,
+                    width: `${dimensions.width * zoom}px`,
+                    height: `${dimensions.height * zoom}px`,
+                    transform: "translate(-50%, -50%)",
+                  }}
+                  onLoad={handleImageLoad}
+                />
+                
+                {/* Subtle crop bounds box overlay */}
+                <div className="absolute inset-0 border border-white/30 rounded-xl pointer-events-none" />
+                <div className="absolute inset-4 border border-dashed border-white/20 rounded-lg pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Zoom Slider */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-neutral-400 font-sans font-medium">
+                <span>Skala Zoom</span>
+                <span>{Math.round(zoom * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value={zoom}
+                onChange={(e) => setZoom(parseFloat(e.target.value))}
+                className="w-full h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-white"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 font-sans pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCropModalOpen(false);
+                  setCropImageSrc(null);
+                }}
+                className="border border-neutral-700 hover:bg-neutral-800 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors text-neutral-300"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleCropSave}
+                className="bg-white text-black hover:bg-neutral-200 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold transition-colors font-sans"
+              >
+                Crop & Simpan
               </button>
             </div>
           </div>
