@@ -900,6 +900,20 @@ export default function AdminDashboard() {
     }
   };
 
+  const toggleProductSoldOut = async (product: ProductWithVariants) => {
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_sold_out: !product.is_sold_out })
+        .eq("id", product.id);
+
+      if (error) throw error;
+      fetchData();
+    } catch (err) {
+      console.error("Gagal mengubah status sold out produk:", err);
+    }
+  };
+
   if (loadingSession) {
     return (
       <div className="min-h-screen bg-neutral-50 text-neutral-900 flex items-center justify-center font-sans">
@@ -1036,6 +1050,7 @@ export default function AdminDashboard() {
                       <th className="py-4 px-6">Nama / Slug</th>
                       <th className="py-4 px-6">Ukuran & Harga Varian</th>
                       <th className="py-4 px-6 w-32 text-center">Status Aktif</th>
+                      <th className="py-4 px-6 w-32 text-center">Status Stok</th>
                       <th className="py-4 px-6 w-36 text-right">Aksi</th>
                     </tr>
                   </thead>
@@ -1105,6 +1120,23 @@ export default function AdminDashboard() {
                             ) : (
                               <span className="bg-neutral-100 text-neutral-500 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans">
                                 Buram
+                              </span>
+                            )}
+                          </button>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            onClick={() => toggleProductSoldOut(prod)}
+                            className="inline-flex items-center justify-center transition-opacity hover:opacity-85 focus:outline-none"
+                            title={prod.is_sold_out ? "Tandai Ready (Tersedia)" : "Tandai Sold Out (Habis)"}
+                          >
+                            {prod.is_sold_out ? (
+                              <span className="bg-red-50 text-red-600 border border-red-200 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans">
+                                Sold Out
+                              </span>
+                            ) : (
+                              <span className="bg-green-50 text-green-600 border border-green-200 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans">
+                                Ready
                               </span>
                             )}
                           </button>
