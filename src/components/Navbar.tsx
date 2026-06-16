@@ -39,9 +39,20 @@ export default function Navbar() {
     };
   }, [isOpen]);
 
+  const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, targetId?: string) => {
+    if (targetId && typeof window !== "undefined" && window.location.pathname === "/") {
+      e.preventDefault();
+      const element = document.getElementById(targetId);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+      setIsOpen(false);
+    }
+  };
+
   const menuItems = [
-    { label: "Katalog", href: "/", isExternal: false },
-    { label: "About", href: "/", isExternal: false },
+    { label: "Katalog", href: "/", targetId: "koleksi", isExternal: false },
+    { label: "About", href: "/", targetId: "tentang", isExternal: false },
     { label: "Shopee", href: "https://shopee.co.id/al.parfumeco", isExternal: true },
     { label: "Instagram", href: "https://www.instagram.com/al.parfumeco", isExternal: true },
   ];
@@ -74,10 +85,18 @@ export default function Navbar() {
           <div className="flex items-center space-x-6 md:space-x-8">
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-neutral-500 font-sans">
-              <Link href="/" className="hover:text-brandBlack transition-colors">
+              <Link 
+                href="/" 
+                onClick={(e) => scrollToSection(e, "koleksi")}
+                className="hover:text-brandBlack transition-colors"
+              >
                 Katalog
               </Link>
-              <Link href="/" className="hover:text-brandBlack transition-colors">
+              <Link 
+                href="/" 
+                onClick={(e) => scrollToSection(e, "tentang")}
+                className="hover:text-brandBlack transition-colors"
+              >
                 About
               </Link>
             </div>
@@ -152,7 +171,12 @@ export default function Navbar() {
                 href={item.href}
                 target={item.isExternal ? "_blank" : undefined}
                 rel={item.isExternal ? "noopener noreferrer" : undefined}
-                onClick={() => setIsOpen(false)}
+                onClick={(e) => {
+                  setIsOpen(false);
+                  if (!item.isExternal && item.targetId) {
+                    scrollToSection(e, item.targetId);
+                  }
+                }}
                 className={`flex items-center justify-between text-[28px] font-bold text-[var(--foreground)] hover:opacity-75 transition-all duration-300 ${
                   isOpen ? "animate-slide-up" : "opacity-0"
                 }`}

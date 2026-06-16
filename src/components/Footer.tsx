@@ -1,8 +1,20 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import { ShoppingBag } from "lucide-react";
 
 export default function Footer() {
+  const scrollToSection = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
+    if (typeof window !== "undefined" && window.location.pathname === "/") {
+      e.preventDefault();
+      const element = document.getElementById(targetId);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+  };
+
   return (
     <footer className="bg-brandWhite border-t border-brandBorder text-neutral-500 py-16 px-6 font-sans text-sm transition-colors duration-300">
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-12">
@@ -27,12 +39,20 @@ export default function Footer() {
           </h4>
           <ul className="space-y-2 text-xs font-light font-sans">
             <li>
-              <Link href="/" className="hover:text-brandBlack transition-colors">
+              <Link 
+                href="/" 
+                onClick={(e) => scrollToSection(e, "koleksi")}
+                className="hover:text-brandBlack transition-colors"
+              >
                 Katalog Produk
               </Link>
             </li>
             <li>
-              <Link href="/" className="hover:text-brandBlack transition-colors">
+              <Link 
+                href="/" 
+                onClick={(e) => scrollToSection(e, "tentang")}
+                className="hover:text-brandBlack transition-colors"
+              >
                 Tentang Kami (About)
               </Link>
             </li>

@@ -110,6 +110,23 @@ export default async function Home() {
         </section>
       </main>
       <Footer />
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `
+            document.addEventListener('click', function(e) {
+              const anchor = e.target.closest('a[href^="#"]');
+              if (anchor) {
+                e.preventDefault();
+                const targetId = anchor.getAttribute('href').substring(1);
+                const element = document.getElementById(targetId);
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth' });
+                }
+              }
+            });
+          `,
+        }}
+      />
     </div>
   );
 }
