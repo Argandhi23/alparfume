@@ -42,6 +42,8 @@ export default function Navbar() {
   const menuItems = [
     { label: "Katalog", href: "/#koleksi", isExternal: false },
     { label: "About", href: "/#tentang", isExternal: false },
+    { label: "Shopee", href: "https://shopee.co.id/al.parfumeco", isExternal: true },
+    { label: "Instagram", href: "https://www.instagram.com/al.parfumeco", isExternal: true },
   ];
 
   return (

@@ -5,6 +5,16 @@ import { ProductWithVariants, ProductVariant } from "@/lib/supabase";
 import { formatRupiah } from "@/lib/whatsapp";
 import { useCart } from "@/context/CartContext";
 import OrderFormModal from "./OrderFormModal";
+import { ShoppingBag } from "lucide-react";
+
+const SHOPEE_LINKS: Record<string, string> = {
+  "guavin": "https://id.shp.ee/15mjg5Mm",
+  "merry-kiss": "https://id.shp.ee/ZDXiBReF",
+  "serenity": "https://id.shp.ee/zryD5f34",
+  "elsyian-vanilla": "https://id.shp.ee/tqu9CvKH",
+  "elysian-vanilla": "https://id.shp.ee/tqu9CvKH",
+  "pink-romance": "https://id.shp.ee/CywogDXy",
+};
 
 interface ProductDetailsClientProps {
   product: ProductWithVariants;
@@ -183,6 +193,16 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
           >
             Beli Langsung
           </button>
+
+          <a
+            href={SHOPEE_LINKS[product.slug] || "https://shopee.co.id/al.parfumeco"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full border border-[#ee4d2d] bg-transparent text-[#ee4d2d] font-medium text-sm py-3 hover:bg-[#ee4d2d] hover:text-white transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans text-center cursor-pointer"
+          >
+            <ShoppingBag className="w-4 h-4" />
+            Pesan via Shopee
+          </a>
         </div>
       ) : (
         <div className="text-sm text-[var(--text-muted)] py-4 font-light font-sans">
