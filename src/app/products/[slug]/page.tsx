@@ -120,7 +120,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         <div className="max-w-6xl mx-auto">
           {/* Back Link */}
           <Link 
-            href="/#koleksi" 
+            href="/" 
             className="inline-flex items-center gap-2 text-[10px] uppercase tracking-widest text-neutral-400 hover:text-brandBlack transition-colors duration-200 mb-12 font-sans font-light"
           >
             <ArrowLeft className="w-4 h-4" />

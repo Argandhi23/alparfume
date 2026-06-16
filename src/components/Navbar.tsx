@@ -40,8 +40,8 @@ export default function Navbar() {
   }, [isOpen]);
 
   const menuItems = [
-    { label: "Katalog", href: "/#koleksi", isExternal: false },
-    { label: "About", href: "/#tentang", isExternal: false },
+    { label: "Katalog", href: "/", isExternal: false },
+    { label: "About", href: "/", isExternal: false },
     { label: "Shopee", href: "https://shopee.co.id/al.parfumeco", isExternal: true },
     { label: "Instagram", href: "https://www.instagram.com/al.parfumeco", isExternal: true },
   ];
@@ -74,10 +74,10 @@ export default function Navbar() {
           <div className="flex items-center space-x-6 md:space-x-8">
             {/* Desktop Navigation */}
             <div className="hidden md:flex items-center space-x-8 text-sm font-medium text-neutral-500 font-sans">
-              <Link href="/#koleksi" className="hover:text-brandBlack transition-colors">
+              <Link href="/" className="hover:text-brandBlack transition-colors">
                 Katalog
               </Link>
-              <Link href="/#tentang" className="hover:text-brandBlack transition-colors">
+              <Link href="/" className="hover:text-brandBlack transition-colors">
                 About
               </Link>
             </div>

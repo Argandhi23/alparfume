@@ -27,12 +27,12 @@ export default function Footer() {
           </h4>
           <ul className="space-y-2 text-xs font-light font-sans">
             <li>
-              <Link href="/#koleksi" className="hover:text-brandBlack transition-colors">
+              <Link href="/" className="hover:text-brandBlack transition-colors">
                 Katalog Produk
               </Link>
             </li>
             <li>
-              <Link href="/#tentang" className="hover:text-brandBlack transition-colors">
+              <Link href="/" className="hover:text-brandBlack transition-colors">
                 Tentang Kami (About)
               </Link>
             </li>
