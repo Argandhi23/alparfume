@@ -48,7 +48,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             fill
             sizes="(max-width: 768px) 50vw, 33vw"
             className={`object-cover group-hover:scale-105 transition-transform duration-700 ease-out ${
-              product.is_sold_out ? "blur-[2px] opacity-75" : ""
+              product.is_sold_out ? "opacity-50 grayscale-[30%]" : ""
             }`}
           />
         ) : (
@@ -57,12 +57,10 @@ export default function ProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Sold Out Overlay Badge */}
+        {/* Sold Out Overlay Badge (Top Left black block) */}
         {product.is_sold_out && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 backdrop-blur-[0.5px]">
-            <span className="bg-red-600/90 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-lg border border-red-500/30">
-              Stok Habis
-            </span>
+          <div className="absolute top-4 left-4 z-10 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
+            Stok Habis
           </div>
         )}
       </div>

@@ -15,6 +15,7 @@ async function getProducts() {
       .from("products")
       .select("*, product_variants(*)")
       .eq("is_active", true)
+      .order("is_sold_out", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (error) {

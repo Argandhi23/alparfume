@@ -206,6 +206,7 @@ export default function AdminDashboard() {
       const { data: productsData, error: productsError } = await supabase
         .from("products")
         .select("*, product_variants(*)")
+        .order("is_sold_out", { ascending: true })
         .order("created_at", { ascending: false });
       if (productsError) throw productsError;
       setProducts(productsData || []);
