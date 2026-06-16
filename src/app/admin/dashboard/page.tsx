@@ -66,6 +66,8 @@ export default function AdminDashboard() {
   const [slotStatuses, setSlotStatuses] = useState<("idle" | "uploading" | "error")[]>(["idle", "idle", "idle"]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+  const [formIsSoldOut, setFormIsSoldOut] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Image Crop States
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -239,6 +241,149 @@ export default function AdminDashboard() {
       setLoadingData(false);
     }
   };
+ 
+  const handleExportExcel = async () => {
+    setExportingExcel(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch(`/api/admin/intents?limit=all`, {
+        headers: {
+          Authorization: `Bearer ${token || ""}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch intents for export: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const allIntents: OrderIntent[] = result.data || [];
+
+      if (allIntents.length === 0) {
+        alert("Tidak ada data pendapatan untuk diekspor.");
+        return;
+      }
+
+      // Generate HTML Excel contents
+      const title = "LAPORAN PENDAPATAN AL PARFUME";
+      const printDate = new Date().toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      let totalRevenue = 0;
+      let rowsHtml = "";
+
+      allIntents.forEach((order, index) => {
+        totalRevenue += order.price;
+        const orderDate = new Date(order.created_at).toLocaleDateString("id-ID", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        // Parse items details if available
+        let productDetails = "";
+        if (order.items_json) {
+          try {
+            const items = JSON.parse(order.items_json);
+            if (Array.isArray(items)) {
+              productDetails = items
+                .map((item) => `- ${item.productName} ${item.sizeMl}ml (Qty: ${item.quantity || 1})`)
+                .join("<br>");
+            }
+          } catch {
+            productDetails = `${order.product_name} (${order.size_ml}ml)`;
+          }
+        } else {
+          productDetails = `${order.product_name} (${order.size_ml}ml)`;
+        }
+
+        rowsHtml += `
+          <tr>
+            <td style="border: 1px solid #d1d5db; padding: 8px; text-align: center;">${index + 1}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px; white-space: nowrap;">${orderDate}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px; font-weight: 500;">${order.customer_name || "-"}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px; mso-number-format:'\@';">${order.customer_wa || "-"}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px;">${order.customer_address || "-"}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px; font-family: monospace; font-size: 11px;">${productDetails}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px; font-style: italic;">${order.order_notes || "-"}</td>
+            <td style="border: 1px solid #d1d5db; padding: 8px; text-align: right; font-weight: 600;">${order.price}</td>
+          </tr>
+        `;
+      });
+
+      const excelHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+          <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+          <!--[if gte mso 9]>
+          <xml>
+            <x:ExcelWorkbook>
+              <x:ExcelWorksheets>
+                <x:ExcelWorksheet>
+                  <x:Name>Laporan Pendapatan</x:Name>
+                  <x:WorksheetOptions>
+                    <x:DisplayGridlines/>
+                  </x:WorksheetOptions>
+                </x:ExcelWorksheet>
+              </x:ExcelWorksheets>
+            </x:ExcelWorkbook>
+          </xml>
+          <![endif]-->
+        </head>
+        <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+          <h2 style="margin: 0; color: #111827;">${title}</h2>
+          <p style="margin: 4px 0 24px 0; font-size: 12px; color: #4b5563;">Tanggal Cetak: ${printDate}</p>
+          <table style="border-collapse: collapse; width: 100%; font-size: 13px;">
+            <thead>
+              <tr style="background-color: #1f2937; color: #ffffff;">
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: center; width: 50px;">No</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: left; width: 150px;">Tanggal Pesanan</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: left; width: 180px;">Nama Pelanggan</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: left; width: 130px;">No. WhatsApp</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: left; width: 300px;">Alamat COD / Pengiriman</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: left; width: 250px;">Detail Produk</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: left; width: 200px;">Catatan Order</th>
+                <th style="border: 1px solid #d1d5db; padding: 10px; font-weight: bold; text-align: right; width: 120px;">Total Bayar (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+              <tr style="background-color: #f3f4f6; font-weight: bold;">
+                <td colspan="7" style="border: 1px solid #d1d5db; padding: 10px; text-align: right;">TOTAL PENDAPATAN:</td>
+                <td style="border: 1px solid #d1d5db; padding: 10px; text-align: right; color: #059669;">${totalRevenue}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+        </html>
+      `;
+
+      // Download file client-side
+      const blob = new Blob([excelHtml], { type: "application/vnd.ms-excel;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Laporan_Pendapatan_AlParfume_${Date.now()}.xls`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Gagal mengekspor data ke Excel:", err);
+      alert("Gagal mengekspor data ke Excel.");
+    } finally {
+      setExportingExcel(false);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -386,6 +531,7 @@ export default function AdminDashboard() {
     setFormMiddleNotes("");
     setFormBottomNotes("");
     setFormIsActive(true);
+    setFormIsSoldOut(false);
     setFormVariants([{ size_ml: 35, price: 45000 }]);
     setFormImages([null, null, null]);
     setSlotStatuses(["idle", "idle", "idle"]);
@@ -417,6 +563,7 @@ export default function AdminDashboard() {
     setFormMiddleNotes(middle);
     setFormBottomNotes(bottom);
     setFormIsActive(product.is_active);
+    setFormIsSoldOut(product.is_sold_out || false);
     
     if (product.product_variants && product.product_variants.length > 0) {
       setFormVariants(product.product_variants.map(v => ({ size_ml: v.size_ml, price: v.price })));
@@ -613,7 +760,8 @@ export default function AdminDashboard() {
               description: formDescription.trim(),
               notes: notesString,
               image_url: finalImageUrl,
-              is_active: formIsActive
+              is_active: formIsActive,
+              is_sold_out: formIsSoldOut
             }
           ])
           .select()
@@ -631,7 +779,8 @@ export default function AdminDashboard() {
             description: formDescription.trim(),
             notes: notesString,
             image_url: finalImageUrl,
-            is_active: formIsActive
+            is_active: formIsActive,
+            is_sold_out: formIsSoldOut
           })
           .eq("id", productId);
 
@@ -1008,6 +1157,18 @@ export default function AdminDashboard() {
                   </button>
                 )}
                 <button
+                  onClick={handleExportExcel}
+                  disabled={loadingData || exportingExcel}
+                  className="border border-green-200 hover:bg-green-50 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-all duration-200 font-sans bg-white text-green-700 shadow-sm"
+                >
+                  {exportingExcel ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-green-600" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 text-green-600" />
+                  )}
+                  {exportingExcel ? "Mengekspor..." : "Ekspor Excel"}
+                </button>
+                <button
                   onClick={() => fetchIntents(intentsPage)}
                   disabled={loadingData}
                   className="border border-neutral-200 hover:bg-neutral-50 px-5 py-2.5 rounded-full text-xs uppercase tracking-widest font-semibold flex items-center gap-2 transition-all duration-200 font-sans bg-white text-neutral-700 shadow-sm"
@@ -1309,6 +1470,25 @@ export default function AdminDashboard() {
                     >
                       {formIsActive ? (
                         <ToggleRight className="w-10 h-10 text-black" />
+                      ) : (
+                        <ToggleLeft className="w-10 h-10 text-neutral-200" />
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status Stok (Sold Out) */}
+                  <div className="flex items-center justify-between py-2.5 border-t border-neutral-100">
+                    <div className="space-y-0.5">
+                      <span className="text-xs tracking-wider text-neutral-400 uppercase font-semibold font-sans">Stok Habis (Sold Out)</span>
+                      <span className="text-[10px] text-neutral-400 font-sans">Tampilkan label stok habis dan nonaktifkan tombol beli</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormIsSoldOut(!formIsSoldOut)}
+                      className="text-brandBlack focus:outline-none"
+                    >
+                      {formIsSoldOut ? (
+                        <ToggleRight className="w-10 h-10 text-red-500" />
                       ) : (
                         <ToggleLeft className="w-10 h-10 text-neutral-200" />
                       )}

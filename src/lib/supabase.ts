@@ -13,6 +13,7 @@ export interface Product {
   notes: string; // Stored as raw text or JSON string containing {"top": "...", "middle": "...", "bottom": "..."}
   image_url: string | null;
   is_active: boolean;
+  is_sold_out: boolean;
   created_at: string;
 }
 

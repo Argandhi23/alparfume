@@ -178,7 +178,35 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
       )}
 
       {/* Action Buttons */}
-      {selectedVariant ? (
+      {product.is_sold_out ? (
+        <div className="pt-4 space-y-3">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm">
+            Maaf, produk ini sedang kosong (stok habis). Hubungi kami via WhatsApp di footer untuk informasi ketersediaan kembali.
+          </div>
+          
+          <button
+            disabled
+            className="w-full bg-neutral-200 text-neutral-400 font-medium text-sm py-3 flex items-center justify-center gap-3 rounded-full font-sans cursor-not-allowed border border-transparent"
+          >
+            Stok Habis (Tambah ke Keranjang)
+          </button>
+          
+          <button
+            disabled
+            className="w-full border border-neutral-200 bg-transparent text-neutral-400 font-medium text-sm py-3 flex items-center justify-center gap-3 rounded-full font-sans cursor-not-allowed"
+          >
+            Stok Habis (Beli Langsung)
+          </button>
+
+          <button
+            disabled
+            className="w-full border border-neutral-200 bg-transparent text-neutral-400 font-medium text-sm py-3 flex items-center justify-center gap-3 rounded-full font-sans cursor-not-allowed"
+          >
+            <ShoppingBag className="w-4 h-4 text-neutral-300" />
+            Stok Habis (Pesan via Shopee)
+          </button>
+        </div>
+      ) : selectedVariant ? (
         <div className="pt-4 space-y-3">
           <button
             onClick={handleAddToCart}

@@ -47,11 +47,22 @@ export default function ProductCard({ product }: ProductCardProps) {
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 33vw"
-            className="object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+            className={`object-cover group-hover:scale-105 transition-transform duration-700 ease-out ${
+              product.is_sold_out ? "blur-[2px] opacity-75" : ""
+            }`}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-[var(--background-secondary)] text-[var(--text-muted)] text-xs uppercase tracking-widest font-light">
             Belum ada foto
+          </div>
+        )}
+
+        {/* Sold Out Overlay Badge */}
+        {product.is_sold_out && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20 backdrop-blur-[0.5px]">
+            <span className="bg-red-600/90 backdrop-blur-md text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2 rounded-full shadow-lg border border-red-500/30">
+              Stok Habis
+            </span>
           </div>
         )}
       </div>
