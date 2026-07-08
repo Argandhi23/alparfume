@@ -223,7 +223,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
           </button>
 
           <a
-            href={SHOPEE_LINKS[product.slug] || "https://shopee.co.id/al.parfumeco"}
+            href={product.shopee_link || SHOPEE_LINKS[product.slug] || "https://shopee.co.id/al.parfumeco"}
             target="_blank"
             rel="noopener noreferrer"
             className="w-full border border-[#ee4d2d] bg-transparent text-[#ee4d2d] font-medium text-sm py-3 hover:bg-[#ee4d2d] hover:text-white transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans text-center cursor-pointer"

@@ -67,6 +67,7 @@ export default function AdminDashboard() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [formIsSoldOut, setFormIsSoldOut] = useState(false);
+  const [formShopeeLink, setFormShopeeLink] = useState("");
   const [exportingExcel, setExportingExcel] = useState(false);
 
   // Image Crop States
@@ -533,6 +534,7 @@ export default function AdminDashboard() {
     setFormBottomNotes("");
     setFormIsActive(true);
     setFormIsSoldOut(false);
+    setFormShopeeLink("");
     setFormVariants([{ size_ml: 35, price: 45000 }]);
     setFormImages([null, null, null]);
     setSlotStatuses(["idle", "idle", "idle"]);
@@ -565,6 +567,7 @@ export default function AdminDashboard() {
     setFormBottomNotes(bottom);
     setFormIsActive(product.is_active);
     setFormIsSoldOut(product.is_sold_out || false);
+    setFormShopeeLink(product.shopee_link || "");
     
     if (product.product_variants && product.product_variants.length > 0) {
       setFormVariants(product.product_variants.map(v => ({ size_ml: v.size_ml, price: v.price })));
@@ -762,7 +765,8 @@ export default function AdminDashboard() {
               notes: notesString,
               image_url: finalImageUrl,
               is_active: formIsActive,
-              is_sold_out: formIsSoldOut
+              is_sold_out: formIsSoldOut,
+              shopee_link: formShopeeLink.trim() || null
             }
           ])
           .select()
@@ -781,7 +785,8 @@ export default function AdminDashboard() {
             notes: notesString,
             image_url: finalImageUrl,
             is_active: formIsActive,
-            is_sold_out: formIsSoldOut
+            is_sold_out: formIsSoldOut,
+            shopee_link: formShopeeLink.trim() || null
           })
           .eq("id", productId);
 
@@ -1487,6 +1492,17 @@ export default function AdminDashboard() {
                       onChange={(e) => setFormDescription(e.target.value)}
                       className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-xs text-brandBlack focus:outline-none focus:border-neutral-900 focus:ring-0 transition-colors resize-none leading-relaxed font-sans"
                       placeholder="Tulis karakteristik wangi parfum..."
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs tracking-wider text-neutral-400 uppercase font-semibold font-sans">Link Shopee</label>
+                    <input
+                      type="url"
+                      value={formShopeeLink}
+                      onChange={(e) => setFormShopeeLink(e.target.value)}
+                      className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-xs text-brandBlack focus:outline-none focus:border-neutral-900 focus:ring-0 transition-colors font-sans"
+                      placeholder="Contoh: https://shopee.co.id/al.parfumeco"
                     />
                   </div>
 

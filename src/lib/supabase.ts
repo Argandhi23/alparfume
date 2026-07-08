@@ -14,6 +14,7 @@ export interface Product {
   image_url: string | null;
   is_active: boolean;
   is_sold_out: boolean;
+  shopee_link: string | null;
   created_at: string;
 }
 
