@@ -30,6 +30,9 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   
   const { addToCart } = useCart();
 
+  const isSoldOut = product.is_sold_out || (product.stock !== undefined && product.stock !== null && product.stock <= 0);
+  const isLowStock = !isSoldOut && (product.is_low_stock || (product.stock !== undefined && product.stock !== null && product.stock < 5));
+
   // Parse notes JSON or fallback to raw
   let notes: { top?: string; middle?: string; bottom?: string } | null = null;
   if (product.notes) {
@@ -177,8 +180,15 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         </div>
       )}
 
+      {/* Sisa Stok */}
+      {!isSoldOut && product.stock !== undefined && product.stock !== null && product.stock > 0 && (
+        <div className="text-xs text-[var(--text-muted)] font-sans">
+          Stok Tersisa: <span className="font-semibold text-brandBlack">{product.stock} pcs</span>
+        </div>
+      )}
+
       {/* Action Buttons */}
-      {product.is_sold_out ? (
+      {isSoldOut ? (
         <div className="pt-4 space-y-3">
           <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm">
             Maaf, produk ini sedang kosong (stok habis). Hubungi kami via WhatsApp di footer untuk informasi ketersediaan kembali.
@@ -208,7 +218,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         </div>
       ) : selectedVariant ? (
         <div className="pt-4 space-y-3">
-          {product.is_low_stock && (
+          {isLowStock && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-3 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm">
               ⚠️ Stok menipis! Segera pesan sebelum kehabisan.
             </div>

@@ -11,6 +11,9 @@ export default function ProductCard({ product }: ProductCardProps) {
   const prices = product.product_variants?.map((v) => v.price) || [];
   const minPrice = prices.length > 0 ? Math.min(...prices) : null;
 
+  const isSoldOut = product.is_sold_out || (product.stock !== undefined && product.stock !== null && product.stock <= 0);
+  const isLowStock = !isSoldOut && (product.is_low_stock || (product.stock !== undefined && product.stock !== null && product.stock < 5));
+
   let displayImage = "";
   if (product.image_url) {
     if (product.image_url.startsWith("[")) {
@@ -48,7 +51,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             fill
             sizes="(max-width: 768px) 50vw, 33vw"
             className={`object-cover group-hover:scale-105 transition-transform duration-700 ease-out ${
-              product.is_sold_out ? "opacity-50 grayscale-[30%]" : ""
+              isSoldOut ? "opacity-50 grayscale-[30%]" : ""
             }`}
           />
         ) : (
@@ -58,11 +61,11 @@ export default function ProductCard({ product }: ProductCardProps) {
         )}
 
         {/* Sold Out or Low Stock Overlay Badge */}
-        {product.is_sold_out ? (
+        {isSoldOut ? (
           <div className="absolute top-4 left-4 z-10 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
             Stok Habis
           </div>
-        ) : product.is_low_stock ? (
+        ) : isLowStock ? (
           <div className="absolute top-4 left-4 z-10 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
             Stok Menipis
           </div>
@@ -74,10 +77,15 @@ export default function ProductCard({ product }: ProductCardProps) {
           {toTitleCase(product.name)}
         </h3>
         
-        <div>
+        <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-[var(--foreground)]">
             {minPrice !== null ? formatRupiah(minPrice) : "Hubungi Kami"}
           </span>
+          {!isSoldOut && product.stock !== undefined && product.stock !== null && product.stock > 0 && (
+            <span className="text-[10px] text-[var(--text-muted)] font-medium bg-[var(--background-secondary)] px-2.5 py-0.5 rounded-full">
+              Stok: {product.stock}
+            </span>
+          )}
         </div>
       </div>
     </Link>

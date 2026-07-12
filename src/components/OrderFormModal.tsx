@@ -92,6 +92,27 @@ export default function OrderFormModal({
 
       if (error) throw error;
 
+      // Decrement stock for each purchased item
+      for (const item of items) {
+        try {
+          const { data: prodData, error: fetchError } = await supabase
+            .from("products")
+            .select("stock")
+            .eq("slug", item.productSlug)
+            .single();
+
+          if (!fetchError && prodData && typeof prodData.stock === "number") {
+            const nextStock = Math.max(0, prodData.stock - item.quantity);
+            await supabase
+              .from("products")
+              .update({ stock: nextStock })
+              .eq("slug", item.productSlug);
+          }
+        } catch (err) {
+          console.error("Gagal mengurangi stok untuk", item.productSlug, err);
+        }
+      }
+
       // 2. Generate WhatsApp message
       let itemsList = "";
       items.forEach((item) => {

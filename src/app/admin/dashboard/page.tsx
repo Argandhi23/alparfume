@@ -68,6 +68,7 @@ export default function AdminDashboard() {
   const [formError, setFormError] = useState("");
   const [formIsSoldOut, setFormIsSoldOut] = useState(false);
   const [formIsLowStock, setFormIsLowStock] = useState(false);
+  const [formStock, setFormStock] = useState<number>(10);
   const [formShopeeLink, setFormShopeeLink] = useState("");
   const [exportingExcel, setExportingExcel] = useState(false);
 
@@ -536,6 +537,7 @@ export default function AdminDashboard() {
     setFormIsActive(true);
     setFormIsSoldOut(false);
     setFormIsLowStock(false);
+    setFormStock(10);
     setFormShopeeLink("");
     setFormVariants([{ size_ml: 35, price: 45000 }]);
     setFormImages([null, null, null]);
@@ -570,6 +572,7 @@ export default function AdminDashboard() {
     setFormIsActive(product.is_active);
     setFormIsSoldOut(product.is_sold_out || false);
     setFormIsLowStock(product.is_low_stock || false);
+    setFormStock(product.stock !== undefined && product.stock !== null ? product.stock : 10);
     setFormShopeeLink(product.shopee_link || "");
     
     if (product.product_variants && product.product_variants.length > 0) {
@@ -770,6 +773,7 @@ export default function AdminDashboard() {
               is_active: formIsActive,
               is_sold_out: formIsSoldOut,
               is_low_stock: formIsLowStock,
+              stock: formStock,
               shopee_link: formShopeeLink.trim() || null
             }
           ])
@@ -791,6 +795,7 @@ export default function AdminDashboard() {
             is_active: formIsActive,
             is_sold_out: formIsSoldOut,
             is_low_stock: formIsLowStock,
+            stock: formStock,
             shopee_link: formShopeeLink.trim() || null
           })
           .eq("id", productId);
@@ -1124,7 +1129,12 @@ export default function AdminDashboard() {
                           </div>
                         </td>
                         <td className="py-4 px-6">
-                          <div className="font-semibold text-sm text-neutral-900 uppercase font-sans">{prod.name}</div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-neutral-900 uppercase font-sans">{prod.name}</span>
+                            <span className="bg-neutral-100 border border-neutral-200 text-neutral-600 text-[10px] font-semibold px-2 py-0.5 rounded-md font-sans">
+                              Stok: {prod.stock !== undefined && prod.stock !== null ? prod.stock : 0}
+                            </span>
+                          </div>
                           <div className="text-[10px] text-neutral-400 font-mono mt-0.5">{prod.slug}</div>
                         </td>
                         <td className="py-4 px-6">
@@ -1548,6 +1558,19 @@ export default function AdminDashboard() {
                       onChange={(e) => setFormShopeeLink(e.target.value)}
                       className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-xs text-brandBlack focus:outline-none focus:border-neutral-900 focus:ring-0 transition-colors font-sans"
                       placeholder="Contoh: https://shopee.co.id/al.parfumeco"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs tracking-wider text-neutral-400 uppercase font-semibold font-sans">Jumlah Stok</label>
+                    <input
+                      type="number"
+                      required
+                      min={0}
+                      value={formStock}
+                      onChange={(e) => setFormStock(parseInt(e.target.value) || 0)}
+                      className="w-full bg-white border border-neutral-200 rounded-lg px-4 py-2.5 text-xs text-brandBlack focus:outline-none focus:border-neutral-900 focus:ring-0 transition-colors font-sans"
+                      placeholder="Contoh: 10"
                     />
                   </div>
 

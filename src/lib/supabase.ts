@@ -15,6 +15,7 @@ export interface Product {
   is_active: boolean;
   is_sold_out: boolean;
   is_low_stock: boolean;
+  stock: number;
   shopee_link: string | null;
   created_at: string;
 }
