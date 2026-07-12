@@ -208,6 +208,12 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         </div>
       ) : selectedVariant ? (
         <div className="pt-4 space-y-3">
+          {product.is_low_stock && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm animate-pulse">
+              ⚠️ Stok menipis! Segera pesan sebelum kehabisan.
+            </div>
+          )}
+
           <button
             onClick={handleAddToCart}
             className="w-full bg-brandBlack text-brandWhite font-medium text-sm py-3 hover:opacity-90 active:opacity-85 transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans"

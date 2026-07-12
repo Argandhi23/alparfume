@@ -57,12 +57,16 @@ export default function ProductCard({ product }: ProductCardProps) {
           </div>
         )}
 
-        {/* Sold Out Overlay Badge (Top Left black block) */}
-        {product.is_sold_out && (
+        {/* Sold Out or Low Stock Overlay Badge */}
+        {product.is_sold_out ? (
           <div className="absolute top-4 left-4 z-10 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
             Stok Habis
           </div>
-        )}
+        ) : product.is_low_stock ? (
+          <div className="absolute top-4 left-4 z-10 bg-amber-600 text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none animate-pulse">
+            Stok Menipis
+          </div>
+        ) : null}
       </div>
       
       <div className="p-5 pt-4 flex-grow flex flex-col justify-between gap-3">
