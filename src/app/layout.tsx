@@ -18,6 +18,11 @@ export const metadata: Metadata = {
     template: "%s | AL PARFUME",
   },
   description: "Temukan aroma yang mencerminkan siapa dirimu. Koleksi parfum mewah minimalis, elegan, dan tahan lama dari AL PARFUME. Beli sekarang via WhatsApp atau Shopee.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
   keywords: [
     "Al Parfume",
     "parfum madiun",

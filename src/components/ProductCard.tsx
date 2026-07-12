@@ -66,7 +66,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             Stok Habis
           </div>
         ) : isLowStock ? (
-          <div className="absolute top-4 left-4 z-10 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
+          <div className="absolute top-4 left-4 z-10 bg-red-600 text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
             Stok Menipis
           </div>
         ) : null}
