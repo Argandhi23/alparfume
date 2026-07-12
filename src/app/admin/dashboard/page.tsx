@@ -67,8 +67,8 @@ export default function AdminDashboard() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
   const [formIsSoldOut, setFormIsSoldOut] = useState(false);
-  const [formIsLowStock, setFormIsLowStock] = useState(false);
   const [formStock, setFormStock] = useState<number>(10);
+  const formIsLowStock = formStock < 5;
   const [formShopeeLink, setFormShopeeLink] = useState("");
   const [exportingExcel, setExportingExcel] = useState(false);
 
@@ -536,7 +536,6 @@ export default function AdminDashboard() {
     setFormBottomNotes("");
     setFormIsActive(true);
     setFormIsSoldOut(false);
-    setFormIsLowStock(false);
     setFormStock(10);
     setFormShopeeLink("");
     setFormVariants([{ size_ml: 35, price: 45000 }]);
@@ -571,7 +570,6 @@ export default function AdminDashboard() {
     setFormBottomNotes(bottom);
     setFormIsActive(product.is_active);
     setFormIsSoldOut(product.is_sold_out || false);
-    setFormIsLowStock(product.is_low_stock || false);
     setFormStock(product.stock !== undefined && product.stock !== null ? product.stock : 10);
     setFormShopeeLink(product.shopee_link || "");
     
@@ -937,19 +935,7 @@ export default function AdminDashboard() {
     }
   };
 
-  const toggleProductLowStock = async (product: ProductWithVariants) => {
-    try {
-      const { error } = await supabase
-        .from("products")
-        .update({ is_low_stock: !product.is_low_stock })
-        .eq("id", product.id);
 
-      if (error) throw error;
-      fetchData();
-    } catch (err) {
-      console.error("Gagal mengubah status low stock produk:", err);
-    }
-  };
 
   if (loadingSession) {
     return (
@@ -1185,21 +1171,15 @@ export default function AdminDashboard() {
                           </button>
                         </td>
                         <td className="py-4 px-6 text-center">
-                          <button
-                            onClick={() => toggleProductLowStock(prod)}
-                            className="inline-flex items-center justify-center transition-opacity hover:opacity-85 focus:outline-none"
-                            title={prod.is_low_stock ? "Tandai Stok Normal" : "Tandai Stok Menipis"}
-                          >
-                            {prod.is_low_stock ? (
-                              <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans">
-                                Menipis
-                              </span>
-                            ) : (
-                              <span className="bg-neutral-50 text-neutral-400 border border-neutral-200 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans">
-                                Normal
-                              </span>
-                            )}
-                          </button>
+                          {prod.stock < 5 ? (
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans select-none">
+                              Menipis
+                            </span>
+                          ) : (
+                            <span className="bg-neutral-50 text-neutral-400 border border-neutral-200 text-[10px] rounded-full px-2.5 py-1 font-semibold uppercase tracking-wider font-sans select-none">
+                              Normal
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-6 text-right">
                           <div className="flex justify-end gap-3">
@@ -1616,12 +1596,12 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between py-2.5 border-t border-neutral-100">
                     <div className="space-y-0.5">
                       <span className="text-xs tracking-wider text-neutral-400 uppercase font-semibold font-sans">Stok Menipis (Low Stock)</span>
-                      <span className="text-[10px] text-neutral-400 font-sans">Tampilkan label stok menipis pada katalog dan detail produk</span>
+                      <span className="text-[10px] text-neutral-400 font-sans">Otomatis aktif jika stok di bawah 5. Diatur berdasarkan jumlah stok.</span>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setFormIsLowStock(!formIsLowStock)}
-                      className="text-brandBlack focus:outline-none"
+                      disabled
+                      className="text-brandBlack focus:outline-none cursor-not-allowed opacity-60"
                     >
                       {formIsLowStock ? (
                         <ToggleRight className="w-10 h-10 text-amber-500" />
