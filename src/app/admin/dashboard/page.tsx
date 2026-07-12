@@ -820,7 +820,15 @@ export default function AdminDashboard() {
       setIsModalOpen(false);
       fetchData();
     } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : "Gagal menyimpan produk.");
+      console.error("Gagal menyimpan produk:", err);
+      let errMsg = "Gagal menyimpan produk.";
+      if (err && typeof err === "object") {
+        const errorObj = err as Record<string, unknown>;
+        errMsg = (errorObj.message as string) || (errorObj.details as string) || errMsg;
+      } else if (err instanceof Error) {
+        errMsg = err.message;
+      }
+      setFormError(errMsg);
     } finally {
       setSaving(false);
     }

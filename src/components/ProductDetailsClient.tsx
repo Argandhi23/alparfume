@@ -209,7 +209,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
       ) : selectedVariant ? (
         <div className="pt-4 space-y-3">
           {product.is_low_stock && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-800 px-5 py-3 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm animate-pulse">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-3 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm">
               ⚠️ Stok menipis! Segera pesan sebelum kehabisan.
             </div>
           )}
