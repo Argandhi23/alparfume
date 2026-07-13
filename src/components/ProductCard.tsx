@@ -62,27 +62,27 @@ export default function ProductCard({ product }: ProductCardProps) {
 
         {/* Sold Out or Low Stock Overlay Badge */}
         {isSoldOut ? (
-          <div className="absolute top-4 left-4 z-10 bg-black text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
+          <div className="absolute top-2.5 left-2.5 sm:top-4 sm:left-4 z-10 bg-black text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-widest px-2.5 sm:px-3.5 py-1.5 sm:py-2 font-sans select-none">
             Stok Habis
           </div>
         ) : isLowStock ? (
-          <div className="absolute top-4 left-4 z-10 bg-red-600 text-white text-[10px] font-bold uppercase tracking-widest px-3.5 py-2 font-sans select-none">
+          <div className="absolute top-2.5 left-2.5 sm:top-4 sm:left-4 z-10 bg-red-600 text-white text-[9px] sm:text-[10px] font-bold uppercase tracking-widest px-2.5 sm:px-3.5 py-1.5 sm:py-2 font-sans select-none">
             Stok Menipis
           </div>
         ) : null}
       </div>
       
-      <div className="p-5 pt-4 flex-grow flex flex-col justify-between gap-3">
-        <h3 className="text-base font-semibold text-brandBlack tracking-tight">
+      <div className="p-3.5 sm:p-5 pt-3 sm:pt-4 flex-grow flex flex-col justify-between gap-2.5 sm:gap-3">
+        <h3 className="text-sm sm:text-base font-semibold text-brandBlack tracking-tight">
           {toTitleCase(product.name)}
         </h3>
         
-        <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-[var(--foreground)]">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-0">
+          <span className="text-xs sm:text-sm font-semibold text-[var(--foreground)]">
             {minPrice !== null ? formatRupiah(minPrice) : "Hubungi Kami"}
           </span>
           {!isSoldOut && product.stock !== undefined && product.stock !== null && product.stock > 0 && (
-            <span className="text-[10px] text-[var(--text-muted)] font-medium bg-[var(--background-secondary)] px-2.5 py-0.5 rounded-full">
+            <span className="self-start sm:self-auto text-[9px] sm:text-[10px] text-[var(--text-muted)] font-medium bg-[var(--background-secondary)] px-2 sm:px-2.5 py-0.5 rounded-full">
               Stok: {product.stock}
             </span>
           )}
