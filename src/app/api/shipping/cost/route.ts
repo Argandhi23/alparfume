@@ -30,6 +30,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { province, city, district, weight = 500 } = body;
 
+    const parsedWeight = typeof weight === "number" && weight > 0 ? weight : 500;
+    const weightKg = Math.max(1, Math.ceil(parsedWeight / 1000));
+
     const searchQueries: string[] = [];
     if (district && city) searchQueries.push(`${district}, ${city}`);
     if (district) searchQueries.push(district);
@@ -53,7 +56,6 @@ export async function POST(request: Request) {
             const json = await searchRes.json();
             const results: KomerceDestination[] = json?.data;
             if (Array.isArray(results) && results.length > 0) {
-              // Try to find best match containing city or district
               const bestMatch = results.find(d => 
                 (district && d.district_name.toLowerCase().includes(district.toLowerCase())) ||
                 (city && d.city_name.toLowerCase().includes(city.toLowerCase()))
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
 
               destinationId = bestMatch.id;
               matchedDestinationLabel = bestMatch.label;
-              break; // Found destination!
+              break;
             }
           }
         } catch (err) {
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 2. CALCULATE LIVE COSTS VIA KOMERCE V2 API
+    // 2. CALCULATE LIVE COSTS VIA KOMERCE V2 API WITH DYNAMIC WEIGHT
     if (API_KEY && destinationId) {
       try {
         const couriers = ["jne", "jnt", "sicepat", "pos", "anteraja", "ide", "ninja", "lion", "spx"];
@@ -80,7 +82,7 @@ export async function POST(request: Request) {
               const formData = new URLSearchParams();
               formData.append("origin", DEFAULT_ORIGIN_ID);
               formData.append("destination", String(destinationId));
-              formData.append("weight", String(weight));
+              formData.append("weight", String(parsedWeight));
               formData.append("courier", courier);
 
               const res = await fetch(`${KOMERCE_BASE}/calculate/domestic-cost`, {
@@ -133,23 +135,21 @@ export async function POST(request: Request) {
         const flattenedRates = liveRatesResults.flat();
 
         if (flattenedRates.length > 0) {
-          // Sort rates so J&T Express comes first or near top, followed by best prices
           flattenedRates.sort((a, b) => {
             if (a.id.includes("jnt") || a.name.toLowerCase().includes("j&t")) return -1;
             if (b.id.includes("jnt") || b.name.toLowerCase().includes("j&t")) return 1;
             return a.cost - b.cost;
           });
 
-          // Limit to 4 clean primary options for an uncluttered checkout
           const finalRates = flattenedRates.slice(0, 4);
-
-          console.log(`[RAJAONGKIR KOMERCE V2 SUCCESS] Fetched ${finalRates.length} rates for ${matchedDestinationLabel}`);
 
           return NextResponse.json({
             success: true,
             is_live_api: true,
             provider: "RajaOngkir Komerce V2",
             destination: matchedDestinationLabel,
+            weight: parsedWeight,
+            weight_kg: weightKg,
             rates: finalRates,
           });
         }
@@ -158,7 +158,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. REALISTIC FALLBACK ENGINE (Primary 4 Couriers Featuring J&T Express)
+    // 3. REALISTIC FALLBACK ENGINE (Multiplied by weightKg)
     const combinedLocation = `${district || ""} ${city || ""} ${province || ""}`.toLowerCase().trim();
     
     let baseTariff = { jnt: 14000, jne: 12000, sicepat: 11000, pos: 10000 };
@@ -182,16 +182,18 @@ export async function POST(request: Request) {
     }
 
     const fallbackRates = [
-      { id: "jnt_ez", name: "J&T Express (EZ)", est: "1-2 Hari", cost: baseTariff.jnt },
-      { id: "jne_reg", name: "JNE Regular (REG)", est: "2-3 Hari", cost: baseTariff.jne },
-      { id: "sicepat_reg", name: "SiCepat Regular (REG)", est: "2-3 Hari", cost: baseTariff.sicepat },
-      { id: "pos_kilat", name: "POS Kilat Khusus", est: "3-4 Hari", cost: baseTariff.pos },
+      { id: "jnt_ez", name: "J&T Express (EZ)", est: "1-2 Hari", cost: baseTariff.jnt * weightKg },
+      { id: "jne_reg", name: "JNE Regular (REG)", est: "2-3 Hari", cost: baseTariff.jne * weightKg },
+      { id: "sicepat_reg", name: "SiCepat Regular (REG)", est: "2-3 Hari", cost: baseTariff.sicepat * weightKg },
+      { id: "pos_kilat", name: "POS Kilat Khusus", est: "3-4 Hari", cost: baseTariff.pos * weightKg },
     ];
 
     return NextResponse.json({
       success: true,
       is_live_api: false,
       provider: "Internal Engine Fallback",
+      weight: parsedWeight,
+      weight_kg: weightKg,
       rates: fallbackRates,
     });
   } catch (err) {

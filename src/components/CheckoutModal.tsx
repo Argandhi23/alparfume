@@ -116,7 +116,14 @@ export function CheckoutModal({
     }
   };
 
-  // Auto calculate ongkir whenever selectedProvince, cityDistrict, or selectedKecamatan changes
+  const isCartMode = !!cartItems && cartItems.length > 0;
+  const totalQuantity = isCartMode
+    ? cartItems.reduce((acc, curr) => acc + curr.quantity, 0)
+    : quantity;
+  // Estimated package weight: 350g per perfume unit (including box & bubblewrap)
+  const totalWeightGrams = Math.max(350, totalQuantity * 350);
+
+  // Auto calculate ongkir whenever selectedProvince, cityDistrict, selectedKecamatan, or totalWeightGrams changes
   useEffect(() => {
     if (deliveryMethod !== "courier") return;
     if (!selectedProvince || !cityDistrict || !selectedKecamatan) return;
@@ -131,7 +138,8 @@ export function CheckoutModal({
             province: selectedProvince?.province || selectedProvince?.name, 
             city: cityDistrict?.city_name || cityDistrict?.name, 
             cityId: cityDistrict?.city_id || cityDistrict?.id,
-            district: selectedKecamatan?.name 
+            district: selectedKecamatan?.name,
+            weight: totalWeightGrams,
           }),
         });
 
@@ -151,11 +159,10 @@ export function CheckoutModal({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [selectedProvince, cityDistrict, selectedKecamatan, deliveryMethod]);
+  }, [selectedProvince, cityDistrict, selectedKecamatan, deliveryMethod, totalWeightGrams]);
 
   if (!isOpen) return null;
 
-  const isCartMode = !!cartItems && cartItems.length > 0;
   const itemTotal = isCartMode
     ? cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
     : (selectedVariant?.price || 0) * quantity;
@@ -606,7 +613,7 @@ export function CheckoutModal({
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between">
                     <label className="text-xs font-bold text-neutral-800 font-sans">
-                      Tarif Ekspedisi (Kec. {selectedKecamatan?.name || cityDistrict?.city_name || cityDistrict?.name || "-"})
+                      Tarif Ekspedisi ({totalQuantity} item &bull; {totalWeightGrams >= 1000 ? `${(totalWeightGrams / 1000).toFixed(1)} kg` : `${totalWeightGrams} gram`})
                     </label>
                     {calculatingOngkir && (
                       <span className="text-[10px] text-neutral-500 font-sans flex items-center gap-1">
