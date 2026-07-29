@@ -21,7 +21,7 @@ export default function ProductCatalogSection({
 
   const sectionTitle = isAllOrBestSeller
     ? "Best Seller"
-    : selectedCategory?.name || "Koleksi Produk";
+    : selectedCategory?.name || "Best Seller";
 
   // Filter products based on selected category or size
   const filteredProducts = products.filter((product) => {

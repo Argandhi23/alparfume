@@ -159,7 +159,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Cari parfum, varian 50ml, aroma..."
+            placeholder="Cari parfum..."
             className="w-full bg-transparent border-none text-sm font-medium text-neutral-900 focus:outline-none placeholder:text-neutral-400 font-sans"
           />
           {query ? (
@@ -181,24 +181,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
         {/* Results Container */}
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3">
-          {!query ? (
-            <div className="py-8 sm:py-10 text-center space-y-3">
-              <p className="text-xs sm:text-sm font-semibold text-neutral-600">
-                Ketik nama parfum atau wangi yang Anda cari
-              </p>
-              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                {["Vanilla", "Sweet", "Fresh", "30ml", "50ml"].map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => setQuery(tag)}
-                    className="text-xs bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-medium px-3 py-1 rounded-lg transition-colors cursor-pointer"
-                  >
-                    {tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : loading ? (
+          {!query ? null : loading ? (
             <div className="py-8 text-center text-xs text-neutral-400">
               Memuat produk...
             </div>

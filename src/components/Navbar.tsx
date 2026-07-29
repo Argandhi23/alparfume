@@ -54,9 +54,8 @@ export default function Navbar() {
 
   const menuItems = [
     { label: "Katalog", href: "/", targetId: "koleksi", isExternal: false },
-    { label: "About", href: "/", targetId: "tentang", isExternal: false },
     { label: "WhatsApp", href: "https://wa.me/6281915931190", isExternal: true },
-    { label: "Shopee", href: "https://shopee.co.id/al.parfumeco", isExternal: true },
+    { label: "TikTok", href: "https://www.tiktok.com/@alparfumeco?_r=1&_t=ZS-98RBwYcpSPB", isExternal: true },
     { label: "Instagram", href: "https://www.instagram.com/al.parfumeco", isExternal: true },
   ];
 
@@ -94,13 +93,6 @@ export default function Navbar() {
                 className="hover:text-brandBlack transition-colors"
               >
                 Katalog
-              </Link>
-              <Link 
-                href="/" 
-                onClick={(e) => scrollToSection(e, "tentang")}
-                className="hover:text-brandBlack transition-colors"
-              >
-                About
               </Link>
             </div>
 

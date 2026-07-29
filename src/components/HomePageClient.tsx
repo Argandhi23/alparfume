@@ -61,7 +61,7 @@ export default function HomePageClient({ products, categories, banners }: HomePa
       <section id="koleksi" className="max-w-7xl mx-auto px-4 sm:px-6 md:px-8 pt-10 md:pt-16 pb-6 scroll-mt-20 bg-brandWhite font-sans">
         <div className="flex flex-col items-center justify-center space-y-4 mb-8 md:mb-12 text-center">
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-brandBlack tracking-tight font-sans">
-            {normalizedQuery ? "Hasil Pencarian" : "Koleksi Produk"}
+            {normalizedQuery ? "Hasil Pencarian" : "Best Seller"}
           </h2>
 
           {/* Instant Search Bar */}
@@ -72,7 +72,7 @@ export default function HomePageClient({ products, categories, banners }: HomePa
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Ketik untuk cari parfum (misal: Vanilla, Rose, 50ml)..."
+                placeholder="Cari parfum..."
                 className="w-full bg-white border border-neutral-200 focus:border-black rounded-full pl-11 pr-10 py-2.5 text-xs sm:text-sm text-neutral-900 placeholder:text-neutral-400 shadow-sm focus:outline-none transition-all font-sans"
               />
               {searchQuery && (

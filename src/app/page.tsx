@@ -81,30 +81,6 @@ export default async function Home() {
           categories={categories}
           banners={banners}
         />
-
-        {/* Brand Story Section */}
-        <section id="tentang" className="bg-[var(--background)] py-24 md:py-32">
-          <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-            {/* Left side */}
-            <div className="space-y-6 text-left">
-              <div className="space-y-2">
-                <span className="text-xs tracking-[0.3em] text-[var(--text-muted)] uppercase font-sans font-semibold block">
-                  TENTANG KAMI
-                </span>
-                <h3 className="font-plus-jakarta text-3xl font-bold text-[var(--foreground)] leading-tight">
-                  Al Parfume
-                </h3>
-              </div>
-              
-              <p className="font-sans text-base text-[var(--foreground)]/80 leading-relaxed font-normal">
-                Kami percaya bahwa aroma adalah bahasa yang paling jujur. Al Parfume hadir untuk membantu kamu menemukan wangi yang benar-benar kamu — bukan sekadar parfum, tapi identitas yang kamu kenakan setiap hari.
-              </p>
-            </div>
-            
-            {/* Right side: generous whitespace */}
-            <div className="hidden md:block"></div>
-          </div>
-        </section>
       </main>
       <Footer />
     </div>
