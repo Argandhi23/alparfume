@@ -183,6 +183,7 @@ export default function ImageCropperModal({
             onMouseLeave={handleMouseUp}
           >
             {/* Draggable & Scalable Image */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               ref={imageRef}
               src={imageSrc}

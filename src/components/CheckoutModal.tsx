@@ -140,9 +140,7 @@ export function CheckoutModal({
           if (data.success && Array.isArray(data.rates)) {
             setCourierOptions(data.rates);
             setIsLiveApi(!!data.is_live_api);
-            const currentSelectedId = selectedCourier.id;
-            const updatedSelected = data.rates.find((c: CourierOption) => c.id === currentSelectedId) || data.rates[0];
-            setSelectedCourier(updatedSelected);
+            setSelectedCourier((prev) => data.rates.find((c: CourierOption) => c.id === prev.id) || data.rates[0]);
           }
         }
       } catch (err) {

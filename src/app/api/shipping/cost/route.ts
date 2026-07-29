@@ -28,7 +28,7 @@ interface KomerceDestination {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { province, city, district, cityId, weight = 500 } = body;
+    const { province, city, district, weight = 500 } = body;
 
     const searchQueries: string[] = [];
     if (district && city) searchQueries.push(`${district}, ${city}`);

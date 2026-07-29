@@ -46,7 +46,7 @@ const DEFAULT_CATEGORIES: Category[] = [
 ];
 
 export default function CategoryGrid({ categories = [] }: CategoryGridProps) {
-  let items = categories.length > 0 ? [...categories] : [...DEFAULT_CATEGORIES];
+  const items = categories.length > 0 ? [...categories] : [...DEFAULT_CATEGORIES];
 
   // Guarantee "Sample" category is ALWAYS present
   const hasSample = items.some(
