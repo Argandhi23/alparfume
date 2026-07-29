@@ -53,11 +53,26 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const { data, error } = await serviceClient
+    let { data, error } = await serviceClient
       .from("order_intents")
       .insert([sanitizedPayload])
       .select()
       .single();
+
+    // Fallback: If payment_method column is missing in Supabase schema cache (PGRST204), insert without top-level payment_method
+    if (error && (error.code === "PGRST204" || error.message?.includes("payment_method"))) {
+      console.warn("Retrying order creation without top-level payment_method column:", error.message);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { payment_method, ...fallbackPayload } = sanitizedPayload;
+      const fallbackResult = await serviceClient
+        .from("order_intents")
+        .insert([fallbackPayload])
+        .select()
+        .single();
+
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) {
       console.error("Database insert error in /api/orders/create:", error);

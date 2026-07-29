@@ -188,7 +188,7 @@ export function CheckoutModal({
 
       const fullAddressString =
         deliveryMethod === "pickup"
-          ? "AMBIL DI TOKO (COD)"
+          ? "AMBIL DI TOKO (COD) - Dekat Jl. Mego Manis II No.10, Manisrejo, Kec. Taman, Kota Madiun, Jawa Timur 63138"
           : `${customerAddress.trim().slice(0, 1000)}, Kec. ${selectedKecamatan?.name || "-"}, ${cityDistrict?.type || ""} ${cityDistrict?.city_name || "-"}, ${selectedProvince?.province || "-"}`;
 
       const courierNameString = deliveryMethod === "pickup" ? "Ambil di Toko" : selectedCourier.name;
@@ -223,6 +223,8 @@ export function CheckoutModal({
         customer_wa: cleanWa,
         customer_address: fullAddressString,
         order_notes: orderNotes.trim().slice(0, 500) || null,
+        payment_method: paymentMethod,
+        payment_status: paymentMethod === "qris" ? "pending_verification" : "cod_pickup",
         items_json: JSON.stringify({
           delivery_method: deliveryMethod,
           courier_name: courierNameString,
@@ -256,11 +258,23 @@ export function CheckoutModal({
       }
 
       if (!finalOrderId) {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from("order_intents")
           .insert([cleanPayload])
           .select()
           .single();
+
+        if (error && (error.code === "PGRST204" || error.message?.includes("payment_method"))) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { payment_method, ...fallbackPayload } = cleanPayload;
+          const fallbackRes = await supabase
+            .from("order_intents")
+            .insert([fallbackPayload])
+            .select()
+            .single();
+          data = fallbackRes.data;
+          error = fallbackRes.error;
+        }
 
         if (error) {
           console.error("Gagal menyimpan pesanan ke Supabase:", error);
@@ -310,6 +324,7 @@ export function CheckoutModal({
         customerName: cleanName,
         customerWa: cleanWa,
         customerAddress: fullAddressString,
+        deliveryMethod,
         paymentMethod,
         paymentStatus: paymentMethod === "qris" ? "pending_verification" : "cod_pickup",
         trackingNumber: null,
@@ -623,12 +638,15 @@ export function CheckoutModal({
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-neutral-100/80 border border-neutral-200 rounded-2xl space-y-1">
-                <div className="text-xs font-bold text-neutral-900 font-sans flex items-center gap-1.5">
-                  <Store className="w-4 h-4 text-black" /> Alamat Pengambilan Toko:
+              <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-2xl space-y-1.5 font-sans">
+                <div className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
+                  <Store className="w-4 h-4 text-black" /> Pengambilan Toko Madiun (Bebas Ongkir):
                 </div>
-                <p className="text-xs text-neutral-700 font-sans leading-relaxed">
-                  Toko Al Parfume Official &bull; Silakan konfirmasi jam pengambilan via WhatsApp setelah melakukan order.
+                <p className="text-xs text-neutral-700 leading-relaxed">
+                  Dekat Jl. Mego Manis II No.10, Manisrejo, Kec. Taman, Kota Madiun, Jawa Timur 63138.
+                </p>
+                <p className="text-[11px] text-neutral-500 italic">
+                  *Peta lokasi interaktif & navigasi Google Maps akan muncul di halaman rincian pesanan.
                 </p>
               </div>
             )}
@@ -699,6 +717,19 @@ export function CheckoutModal({
                 </div>
                 <p className="text-xs text-neutral-600 font-sans leading-relaxed">
                   Setelah menekan tombol <strong>Proses Pesanan Sekarang</strong>, Anda akan langsung diarahkan ke halaman invoice untuk memindai kode QRIS dan mengunggah bukti pembayaran.
+                </p>
+              </div>
+            )}
+
+            {/* COD Info Note (Minimalist B&W) */}
+            {paymentMethod === "cod_pickup" && (
+              <div className="p-4 bg-neutral-900 text-white rounded-2xl space-y-1.5 font-sans">
+                <div className="flex items-center gap-2 font-bold text-xs">
+                  <MapPin className="w-4 h-4 text-white" />
+                  Pengambilan Toko & Pembayaran COD (Tunai)
+                </div>
+                <p className="text-xs text-neutral-300 leading-relaxed font-light">
+                  Lokasi toko Madiun & <strong>Google Maps Petunjuk Arah</strong> akan langsung ditampilkan di halaman berikutnya setelah Anda menekan tombol <strong>Proses Pesanan Sekarang</strong>.
                 </p>
               </div>
             )}
