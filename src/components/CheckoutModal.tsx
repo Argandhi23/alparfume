@@ -18,10 +18,6 @@ interface CheckoutModalProps {
   onSuccess?: () => void;
 }
 
-
-
-
-
 interface RegionOption {
   province_id?: string;
   province?: string;
@@ -74,8 +70,10 @@ export function CheckoutModal({
   useEffect(() => {
     fetch("/api/shipping/regions?type=provinces")
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setProvinces(d); });
+      .then(d => { if (Array.isArray(d)) setProvinces(d); })
+      .catch(err => console.warn("Fetch provinces notice:", err));
   }, []);
+
   const [customerAddress, setCustomerAddress] = useState("");
   const [courierOptions, setCourierOptions] = useState<CourierOption[]>(DEFAULT_COURIERS);
   const [selectedCourier, setSelectedCourier] = useState<CourierOption>(DEFAULT_COURIERS[0]);
@@ -98,7 +96,8 @@ export function CheckoutModal({
       const provName = prov?.province || prov?.name || "";
       fetch(`/api/shipping/regions?type=cities&province_id=${provId}&province_name=${encodeURIComponent(provName)}`)
         .then(r => r.json())
-        .then(d => { if (Array.isArray(d)) setCities(d); });
+        .then(d => { if (Array.isArray(d)) setCities(d); })
+        .catch(err => console.warn("Fetch cities notice:", err));
     }
   };
 
@@ -112,7 +111,8 @@ export function CheckoutModal({
       const cityName = city.city_name || city.name || "";
       fetch(`/api/shipping/regions?type=subdistricts&city_id=${cityId}&province_id=${selectedProvince.province_id || selectedProvince.id}&province_name=${encodeURIComponent(provName)}&city_name=${encodeURIComponent(cityName)}`)
         .then(r => r.json())
-        .then(d => { if (Array.isArray(d)) setSubdistricts(d); });
+        .then(d => { if (Array.isArray(d)) setSubdistricts(d); })
+        .catch(err => console.warn("Fetch subdistricts notice:", err));
     }
   };
 
@@ -171,8 +171,11 @@ export function CheckoutModal({
     setSubmitting(true);
 
     try {
-      if (!customerName.trim() || !customerWa.trim()) {
-        alert("Mohon lengkapi Nama dan Nomor WhatsApp Anda.");
+      const cleanName = customerName.trim().slice(0, 150);
+      const cleanWa = customerWa.replace(/[^\d+]/g, "").trim().slice(0, 20);
+
+      if (!cleanName || !cleanWa || cleanWa.length < 8) {
+        alert("Mohon lengkapi Nama dan Nomor WhatsApp yang valid.");
         setSubmitting(false);
         return;
       }
@@ -186,7 +189,7 @@ export function CheckoutModal({
       const fullAddressString =
         deliveryMethod === "pickup"
           ? "AMBIL DI TOKO (COD)"
-          : `${customerAddress.trim()}, Kec. ${selectedKecamatan?.name || "-"}, ${cityDistrict?.type || ""} ${cityDistrict?.city_name || "-"}, ${selectedProvince?.province || "-"}`;
+          : `${customerAddress.trim().slice(0, 1000)}, Kec. ${selectedKecamatan?.name || "-"}, ${cityDistrict?.type || ""} ${cityDistrict?.city_name || "-"}, ${selectedProvince?.province || "-"}`;
 
       const courierNameString = deliveryMethod === "pickup" ? "Ambil di Toko" : selectedCourier.name;
 
@@ -216,10 +219,10 @@ export function CheckoutModal({
         product_name: finalProductName,
         size_ml: finalSizeMl,
         price: grandTotal,
-        customer_name: customerName.trim(),
-        customer_wa: customerWa.trim(),
+        customer_name: cleanName,
+        customer_wa: cleanWa,
         customer_address: fullAddressString,
-        order_notes: orderNotes.trim() || null,
+        order_notes: orderNotes.trim().slice(0, 500) || null,
         items_json: JSON.stringify({
           delivery_method: deliveryMethod,
           courier_name: courierNameString,
@@ -304,8 +307,8 @@ export function CheckoutModal({
         grandTotal,
         shippingCost,
         courierName: courierNameString,
-        customerName: customerName.trim(),
-        customerWa: customerWa.trim(),
+        customerName: cleanName,
+        customerWa: cleanWa,
         customerAddress: fullAddressString,
         paymentMethod,
         paymentStatus: paymentMethod === "qris" ? "pending_verification" : "cod_pickup",
@@ -332,8 +335,6 @@ export function CheckoutModal({
       setSubmitting(false);
     }
   };
-
-  
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto font-sans">
@@ -622,11 +623,11 @@ export function CheckoutModal({
                 </div>
               </div>
             ) : (
-              <div className="p-4 bg-amber-50 border border-amber-200/80 rounded-2xl space-y-1">
-                <div className="text-xs font-bold text-amber-900 font-sans flex items-center gap-1.5">
-                  <Store className="w-4 h-4 text-amber-700" /> Alamat Pengambilan Toko:
+              <div className="p-4 bg-neutral-100/80 border border-neutral-200 rounded-2xl space-y-1">
+                <div className="text-xs font-bold text-neutral-900 font-sans flex items-center gap-1.5">
+                  <Store className="w-4 h-4 text-black" /> Alamat Pengambilan Toko:
                 </div>
-                <p className="text-xs text-amber-800 font-sans leading-relaxed">
+                <p className="text-xs text-neutral-700 font-sans leading-relaxed">
                   Toko Al Parfume Official &bull; Silakan konfirmasi jam pengambilan via WhatsApp setelah melakukan order.
                 </p>
               </div>
@@ -640,7 +641,7 @@ export function CheckoutModal({
                 3. Metode Pembayaran
               </span>
               {deliveryMethod === "courier" && (
-                <span className="text-[10px] bg-amber-100 text-amber-900 font-bold px-2.5 py-0.5 rounded-full font-sans">
+                <span className="text-[10px] bg-black text-white font-bold px-2.5 py-0.5 rounded-full font-sans">
                   Kurir: Hanya QRIS
                 </span>
               )}
@@ -693,7 +694,7 @@ export function CheckoutModal({
             {paymentMethod === "qris" && (
               <div className="p-4 bg-neutral-50 border border-neutral-200 rounded-2xl space-y-2">
                 <div className="flex items-center gap-2 font-bold text-xs text-neutral-900 font-sans">
-                  <QrCode className="w-4 h-4 text-emerald-600" />
+                  <QrCode className="w-4 h-4 text-black" />
                   Pembayaran via QRIS (Transfer QR / E-Wallet)
                 </div>
                 <p className="text-xs text-neutral-600 font-sans leading-relaxed">

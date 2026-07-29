@@ -1,49 +1,16 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminSession, getServiceClient } from "@/lib/adminAuth";
 
 export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   try {
-    // 1. Get token from authorization header
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized: Missing token" }, { status: 401 });
-    }
-    const token = authHeader.split(" ")[1];
-
-    // 2. Initialize temporary client with user's token to check auth
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 });
+    const auth = await verifyAdminSession(request);
+    if (!auth.isAuthorized) {
+      return auth.errorResponse!;
     }
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
-    const { data: { user }, error: authError } = await userClient.auth.getUser(token);
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized: Invalid session" }, { status: 401 });
-    }
-
-    // 3. Authenticated! Fetch using service role key
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-    if (!serviceKey) {
-      return NextResponse.json({ error: "Server Configuration Error: Missing Service Key" }, { status: 500 });
-    }
-
-    const serviceClient = createClient(supabaseUrl, serviceKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
+    const serviceClient = getServiceClient();
 
     // Fetch created_at and price for all intents
     const { data, error } = await serviceClient

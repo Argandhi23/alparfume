@@ -10,6 +10,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "orderId dan proofUrl wajib diisi" }, { status: 400 });
     }
 
+    // Limit base64 image length to ~7MB (~5MB raw image) to prevent DoS memory exhaustion
+    if (typeof proofUrl === "string" && proofUrl.length > 7 * 1024 * 1024) {
+      return NextResponse.json({ error: "Ukuran file gambar terlalu besar (Maksimal 5MB)" }, { status: 400 });
+    }
+
     const numericId = parseInt(orderId.toString(), 10);
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -35,22 +40,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Strictly check targetId existence. DO NOT FALLBACK to latest order!
     if (!targetId) {
-      // Fallback to most recent order intent row in table
-      const { data: latest } = await serviceClient
-        .from("order_intents")
-        .select("id")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (latest?.id) {
-        targetId = latest.id;
-      }
-    }
-
-    if (!targetId) {
-      return NextResponse.json({ error: "Order tidak ditemukan di database" }, { status: 404 });
+      return NextResponse.json({ error: "Pesanan tidak ditemukan di database" }, { status: 404 });
     }
 
     // 1. Upload Base64 image to Supabase Storage bucket 'payment-proofs' if bucket exists
@@ -128,7 +120,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 3. Attempt full update (all columns)
+    // 3. Update order_intents row in DB
     const { error: fullErr } = await serviceClient
       .from("order_intents")
       .update({

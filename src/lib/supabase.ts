@@ -77,5 +77,6 @@ export interface OrderIntent {
   destination_city?: string | null;
   destination_subdistrict?: string | null;
   total_price?: number;
+  order_code?: string | null;
   created_at: string;
 }

@@ -12,7 +12,7 @@ interface OrderStatusClientProps {
 
 /**
  * Client-side image compressor using HTML Canvas
- * Resizes max width/height to 1000px, quality 0.7 (Max size ~150KB - 300KB)
+ * Resizes max width/height to 600px, quality 0.6 (Max size ~100KB - 200KB)
  */
 async function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,8 +22,8 @@ async function compressImage(file: File): Promise<string> {
       const img = new window.Image();
       img.src = event.target?.result as string;
       img.onload = () => {
-        const maxWidth = 500;
-        const maxHeight = 500;
+        const maxWidth = 600;
+        const maxHeight = 600;
         let width = img.width;
         let height = img.height;
 
@@ -47,7 +47,7 @@ async function compressImage(file: File): Promise<string> {
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.5);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
         resolve(dataUrl);
       };
       img.onerror = (err) => reject(err);
@@ -62,6 +62,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const [uploadingProof, setUploadingProof] = useState(false);
   const [proofUrl, setProofUrl] = useState<string | null>(initialOrder?.payment_proof_url || null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   useEffect(() => {
     if (!initialOrder) {
@@ -113,12 +114,13 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
 
     setUploadingProof(true);
     setUploadSuccess(false);
+    setUploadError("");
 
     try {
-      // Compress image on client-side (Max 1000px width/height, 70% JPEG quality)
+      // Compress image on client-side (Max 600px width/height, 60% JPEG quality)
       const compressedDataUrl = await compressImage(file);
 
-      // Send compressed proof image to API endpoint (uses service role key to bypass RLS and upload to Supabase Storage if bucket exists)
+      // Send compressed proof image to API endpoint
       const res = await fetch("/api/orders/upload-proof", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,26 +133,28 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         if (json.proofUrl) {
           finalSavedUrl = json.proofUrl;
         }
-      }
+        setProofUrl(finalSavedUrl);
+        setUploadSuccess(true);
+        setOrder((prev) => (prev ? { ...prev, payment_proof_url: finalSavedUrl, payment_status: "pending_verification" } : null));
 
-      setProofUrl(finalSavedUrl);
-      setUploadSuccess(true);
-      setOrder((prev) => (prev ? { ...prev, payment_proof_url: finalSavedUrl, payment_status: "pending_verification" } : null));
-
-      // Update local storage receipt
-      try {
-        const saved = localStorage.getItem(`alparfume_order_${orderId}`);
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          parsed.paymentProofUrl = compressedDataUrl;
-          localStorage.setItem(`alparfume_order_${orderId}`, JSON.stringify(parsed));
+        // Update local storage receipt
+        try {
+          const saved = localStorage.getItem(`alparfume_order_${orderId}`);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            parsed.paymentProofUrl = compressedDataUrl;
+            localStorage.setItem(`alparfume_order_${orderId}`, JSON.stringify(parsed));
+          }
+        } catch {
+          // Ignore quota limits
         }
-      } catch {
-        // Ignore quota limits
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        setUploadError(errJson.error || "Gagal mengunggah bukti pembayaran.");
       }
     } catch (err) {
       console.error("Gagal mengunggah & mengompresi bukti pembayaran:", err);
-      alert("Gagal mengunggah bukti pembayaran. Silakan coba lagi.");
+      setUploadError("Terjadi kesalahan saat mengunggah bukti. Silakan coba lagi.");
     } finally {
       setUploadingProof(false);
     }
@@ -348,9 +352,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               )}
 
               {uploadSuccess && (
-                <div className="p-3 bg-neutral-100 text-neutral-900 rounded-xl text-xs font-bold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-neutral-700" />
+                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                   Bukti berhasil diunggah! Admin akan segera mengonfirmasi pesanan Anda.
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold">
+                  {uploadError}
                 </div>
               )}
             </div>

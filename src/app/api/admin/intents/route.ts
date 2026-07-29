@@ -1,21 +1,16 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminSession, getServiceClient } from "@/lib/adminAuth";
 
 export const revalidate = 0;
 
 export async function GET(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-    
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 });
+    const auth = await verifyAdminSession(request);
+    if (!auth.isAuthorized) {
+      return auth.errorResponse!;
     }
 
-    const serviceClient = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
+    const serviceClient = getServiceClient();
     const { searchParams } = new URL(request.url);
     const limitParam = searchParams.get("limit");
 
@@ -31,9 +26,11 @@ export async function GET(request: NextRequest) {
       error = allErr;
     } else {
       const page = parseInt(searchParams.get("page") || "1", 10);
-      const limit = parseInt(limitParam || "10", 10);
-      const fromIndex = (page - 1) * limit;
-      const toIndex = fromIndex + limit - 1;
+      const limit = parseInt(limitParam || "15", 10);
+      const safePage = isNaN(page) || page < 1 ? 1 : page;
+      const safeLimit = isNaN(limit) || limit < 1 ? 15 : limit;
+      const fromIndex = (safePage - 1) * safeLimit;
+      const toIndex = fromIndex + safeLimit - 1;
 
       const { data: pageData, count: pageCount, error: pageErr } = await serviceClient
         .from("order_intents")
@@ -51,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data, totalCount: count || 0 });
   } catch (err) {
-    console.error("API Route Error:", err);
+    console.error("API Route GET Error:", err);
     const errorMessage = err instanceof Error ? err.message : "Internal Server Error";
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
@@ -59,16 +56,12 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-    
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 });
+    const auth = await verifyAdminSession(request);
+    if (!auth.isAuthorized) {
+      return auth.errorResponse!;
     }
 
-    const serviceClient = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const serviceClient = getServiceClient();
 
     let body: Record<string, unknown> = {};
     try {
@@ -128,16 +121,12 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-    
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({ error: "Server Configuration Error" }, { status: 500 });
+    const auth = await verifyAdminSession(request);
+    if (!auth.isAuthorized) {
+      return auth.errorResponse!;
     }
 
-    const serviceClient = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
+    const serviceClient = getServiceClient();
 
     const body: { ids?: (string | number)[] } = await request.json();
     const { ids } = body;

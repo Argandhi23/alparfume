@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     // 2. CALCULATE LIVE COSTS VIA KOMERCE V2 API
     if (API_KEY && destinationId) {
       try {
-        const couriers = ["jne", "jnt", "sicepat", "pos"];
+        const couriers = ["jne", "jnt", "sicepat", "pos", "anteraja", "ide", "ninja", "lion", "spx"];
         const liveRatesResults = await Promise.all(
           couriers.map(async (courier) => {
             try {
@@ -99,7 +99,6 @@ export async function POST(request: Request) {
                 const items: KomerceCostItem[] = data?.data;
 
                 if (Array.isArray(items) && items.length > 0) {
-                  // Filter out oversized trucking / heavy cargo codes unless standard
                   const validServices = items.filter(i => 
                     i.cost > 0 && 
                     !i.service.includes(">130") && 
@@ -116,7 +115,7 @@ export async function POST(request: Request) {
                     }
 
                     return {
-                      id: `${i.code}_${i.service}`.toLowerCase(),
+                      id: `${i.code}_${i.service}`.toLowerCase().replace(/\s+/g, "_"),
                       name: `${i.name} (${i.service})`,
                       est: formattedEtd,
                       cost: i.cost,
@@ -134,11 +133,15 @@ export async function POST(request: Request) {
         const flattenedRates = liveRatesResults.flat();
 
         if (flattenedRates.length > 0) {
-          // Sort rates from cheapest to highest
-          flattenedRates.sort((a, b) => a.cost - b.cost);
+          // Sort rates so J&T Express comes first or near top, followed by best prices
+          flattenedRates.sort((a, b) => {
+            if (a.id.includes("jnt") || a.name.toLowerCase().includes("j&t")) return -1;
+            if (b.id.includes("jnt") || b.name.toLowerCase().includes("j&t")) return 1;
+            return a.cost - b.cost;
+          });
 
-          // Select top rates (up to 6 distinct options)
-          const finalRates = flattenedRates.slice(0, 6);
+          // Limit to 4 clean primary options for an uncluttered checkout
+          const finalRates = flattenedRates.slice(0, 4);
 
           console.log(`[RAJAONGKIR KOMERCE V2 SUCCESS] Fetched ${finalRates.length} rates for ${matchedDestinationLabel}`);
 
@@ -155,34 +158,34 @@ export async function POST(request: Request) {
       }
     }
 
-    // 3. REALISTIC FALLBACK ENGINE (If API Key quota limit reached or network offline)
+    // 3. REALISTIC FALLBACK ENGINE (Primary 4 Couriers Featuring J&T Express)
     const combinedLocation = `${district || ""} ${city || ""} ${province || ""}`.toLowerCase().trim();
     
-    let matchedTariff = { jne: 12000, jnt: 14000, sicepat: 11000, pos: 10000 };
+    let baseTariff = { jnt: 14000, jne: 12000, sicepat: 11000, pos: 10000 };
 
     if (combinedLocation.includes("papua") || combinedLocation.includes("jayapura") || combinedLocation.includes("merauke")) {
-      matchedTariff = { jne: 156000, jnt: 160000, sicepat: 145000, pos: 135000 };
+      baseTariff = { jnt: 160000, jne: 156000, sicepat: 145000, pos: 135000 };
     } else if (combinedLocation.includes("maluku") || combinedLocation.includes("ambon") || combinedLocation.includes("ternate")) {
-      matchedTariff = { jne: 85000, jnt: 90000, sicepat: 80000, pos: 75000 };
+      baseTariff = { jnt: 90000, jne: 85000, sicepat: 80000, pos: 75000 };
     } else if (combinedLocation.includes("sulawesi") || combinedLocation.includes("makassar") || combinedLocation.includes("manado") || combinedLocation.includes("palu")) {
-      matchedTariff = { jne: 52000, jnt: 46000, sicepat: 53000, pos: 49000 };
+      baseTariff = { jnt: 46000, jne: 52000, sicepat: 53000, pos: 49000 };
     } else if (combinedLocation.includes("sumatra") || combinedLocation.includes("sumatera") || combinedLocation.includes("medan") || combinedLocation.includes("palembang") || combinedLocation.includes("padang") || combinedLocation.includes("lampung")) {
-      matchedTariff = { jne: 57000, jnt: 45000, sicepat: 43000, pos: 45000 };
+      baseTariff = { jnt: 45000, jne: 57000, sicepat: 43000, pos: 45000 };
     } else if (combinedLocation.includes("kalimantan") || combinedLocation.includes("pontianak") || combinedLocation.includes("banjarmasin") || combinedLocation.includes("balikpapan")) {
-      matchedTariff = { jne: 48000, jnt: 50000, sicepat: 45000, pos: 42000 };
+      baseTariff = { jnt: 50000, jne: 48000, sicepat: 45000, pos: 42000 };
     } else if (combinedLocation.includes("ntb") || combinedLocation.includes("ntt") || combinedLocation.includes("bali") || combinedLocation.includes("denpasar") || combinedLocation.includes("mataram")) {
-      matchedTariff = { jne: 28000, jnt: 32000, sicepat: 27000, pos: 25000 };
+      baseTariff = { jnt: 32000, jne: 28000, sicepat: 27000, pos: 25000 };
     } else if (combinedLocation.includes("jakarta") || combinedLocation.includes("bogor") || combinedLocation.includes("depok") || combinedLocation.includes("tangerang") || combinedLocation.includes("bekasi")) {
-      matchedTariff = { jne: 11000, jnt: 13000, sicepat: 10000, pos: 10000 };
+      baseTariff = { jnt: 13000, jne: 11000, sicepat: 10000, pos: 10000 };
     } else if (combinedLocation.includes("surabaya") || combinedLocation.includes("sidoarjo") || combinedLocation.includes("gresik")) {
-      matchedTariff = { jne: 8000, jnt: 9000, sicepat: 8000, pos: 7000 };
+      baseTariff = { jnt: 9000, jne: 8000, sicepat: 8000, pos: 7000 };
     }
 
     const fallbackRates = [
-      { id: "jne_reg", name: "JNE Regular", est: "2-3 Hari", cost: matchedTariff.jne },
-      { id: "jnt_ez", name: "J&T Express", est: "1-2 Hari", cost: matchedTariff.jnt },
-      { id: "sicepat_reg", name: "SiCepat REG", est: "2-3 Hari", cost: matchedTariff.sicepat },
-      { id: "pos_reg", name: "POS Kilat Khusus", est: "3-4 Hari", cost: matchedTariff.pos },
+      { id: "jnt_ez", name: "J&T Express (EZ)", est: "1-2 Hari", cost: baseTariff.jnt },
+      { id: "jne_reg", name: "JNE Regular (REG)", est: "2-3 Hari", cost: baseTariff.jne },
+      { id: "sicepat_reg", name: "SiCepat Regular (REG)", est: "2-3 Hari", cost: baseTariff.sicepat },
+      { id: "pos_kilat", name: "POS Kilat Khusus", est: "3-4 Hari", cost: baseTariff.pos },
     ];
 
     return NextResponse.json({

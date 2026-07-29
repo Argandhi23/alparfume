@@ -37,15 +37,19 @@ export default function OrderFormModal({
 
   const validate = () => {
     const newErrors: typeof errors = {};
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    const cleanPhone = phone.replace(/[^\d+]/g, "").trim();
+    const cleanAddress = address.trim();
+
+    if (!cleanName) {
       newErrors.name = "Nama lengkap wajib diisi";
     }
-    if (!phone.trim()) {
+    if (!cleanPhone) {
       newErrors.phone = "Nomor WhatsApp wajib diisi";
-    } else if (!/^(08|628)\d{8,12}$/.test(phone.trim())) {
-      newErrors.phone = "Nomor WhatsApp harus diawali 08 atau 628 (10-14 digit)";
+    } else if (cleanPhone.length < 8 || cleanPhone.length > 20) {
+      newErrors.phone = "Nomor WhatsApp tidak valid (minimal 8 digit)";
     }
-    if (!address.trim()) {
+    if (!cleanAddress) {
       newErrors.address = "Alamat pengiriman wajib diisi";
     }
     setErrors(newErrors);
@@ -55,6 +59,11 @@ export default function OrderFormModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
+
+    const cleanName = name.trim().slice(0, 150);
+    const cleanPhone = phone.replace(/[^\d+]/g, "").trim().slice(0, 20);
+    const cleanAddress = address.trim().slice(0, 1000);
+    const cleanNotes = notes.trim().slice(0, 500);
 
     // Detect mobile or Safari to decide redirection method
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
@@ -82,10 +91,10 @@ export default function OrderFormModal({
           product_name: productName,
           size_ml: sizeMl,
           price: totalPrice,
-          customer_name: name.trim(),
-          customer_wa: phone.trim(),
-          customer_address: address.trim(),
-          order_notes: notes.trim() || null,
+          customer_name: cleanName,
+          customer_wa: cleanPhone,
+          customer_address: cleanAddress,
+          order_notes: cleanNotes || null,
           items_json: JSON.stringify(items),
         },
       ]);
@@ -123,8 +132,8 @@ export default function OrderFormModal({
 
       const waMessage = `Halo Al Parfume! Saya ingin memesan:\n\n${itemsList}\nTotal: ${formatRupiah(
         totalPrice
-      )}\n\nData Pemesan:\nNama: ${name.trim()}\nNo. WA: ${phone.trim()}\nAlamat: ${address.trim()}${
-        notes.trim() ? `\n\nCatatan: ${notes.trim()}` : ""
+      )}\n\nData Pemesan:\nNama: ${cleanName}\nNo. WA: ${cleanPhone}\nAlamat: ${cleanAddress}${
+        cleanNotes ? `\n\nCatatan: ${cleanNotes}` : ""
       }\n\nMohon konfirmasi ketersediaan dan estimasi pengiriman. Terima kasih! 🙏`;
 
       const waNumber = process.env.NEXT_PUBLIC_WA_NUMBER || "6281915931190";

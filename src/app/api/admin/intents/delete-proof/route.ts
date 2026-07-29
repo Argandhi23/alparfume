@@ -1,8 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyAdminSession, getServiceClient } from "@/lib/adminAuth";
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await verifyAdminSession(request);
+    if (!auth.isAuthorized) {
+      return auth.errorResponse!;
+    }
+
     const body = await request.json();
     const { orderId } = body;
 
@@ -10,27 +15,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "orderId wajib diisi" }, { status: 400 });
     }
 
-    const numericId = parseInt(orderId.toString(), 10);
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+    const serviceClient = getServiceClient();
 
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({ error: "Server configuration error" }, { status: 500 });
+    // 1. Fetch target order by id (number or string) or order_code
+    const orderIdStr = String(orderId).trim();
+    const numericId = parseInt(orderIdStr, 10);
+
+    let query = serviceClient.from("order_intents").select("*");
+    if (!isNaN(numericId) && numericId.toString() === orderIdStr) {
+      query = query.or(`id.eq.${numericId},order_code.eq.${orderIdStr}`);
+    } else {
+      query = query.or(`id.eq.${orderIdStr},order_code.eq.${orderIdStr}`);
     }
 
-    const serviceClient = createClient(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-
-    // 1. Fetch current order
-    const { data: order, error: fetchErr } = await serviceClient
-      .from("order_intents")
-      .select("*")
-      .eq("id", numericId)
-      .single();
+    const { data: orders, error: fetchErr } = await query;
+    const order = orders && orders.length > 0 ? orders[0] : null;
 
     if (fetchErr || !order) {
-      return NextResponse.json({ error: "Pesanan tidak ditemukan" }, { status: 404 });
+      // Direct update fallback attempt by ID
+      const { error: directUpdateErr } = await serviceClient
+        .from("order_intents")
+        .update({ payment_proof_url: null })
+        .eq("id", isNaN(numericId) ? orderIdStr : numericId);
+
+      if (!directUpdateErr) {
+        return NextResponse.json({
+          success: true,
+          message: "Bukti pembayaran berhasil diperbarui",
+          fileDeletedFromStorage: false,
+        });
+      }
+
+      return NextResponse.json({ error: `Pesanan (${orderIdStr}) tidak ditemukan` }, { status: 404 });
     }
 
     let proofUrlToDelete = order.payment_proof_url || "";
@@ -41,8 +57,8 @@ export async function POST(request: NextRequest) {
         const parsed = JSON.parse(order.items_json);
         if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
           itemsJsonObj = parsed;
-          if (!proofUrlToDelete && parsed.payment_proof_url) {
-            proofUrlToDelete = parsed.payment_proof_url;
+          if (!proofUrlToDelete && (parsed.payment_proof_url || parsed.paymentProofUrl)) {
+            proofUrlToDelete = parsed.payment_proof_url || parsed.paymentProofUrl;
           }
         }
       } catch {
@@ -52,26 +68,27 @@ export async function POST(request: NextRequest) {
 
     // 2. Delete physical image file from Supabase Storage 'payment-proofs' bucket if applicable
     let fileDeletedFromStorage = false;
-    if (proofUrlToDelete && typeof proofUrlToDelete === "string") {
+    if (proofUrlToDelete && typeof proofUrlToDelete === "string" && !proofUrlToDelete.startsWith("data:")) {
       try {
-        // Match filename from URL (e.g. proof_123_1781231.jpg)
-        const match = proofUrlToDelete.match(/payment-proofs\/([^?#]+)/) || proofUrlToDelete.match(/(proof_[^?#]+)/);
-        if (match && match[1]) {
-          const fileName = match[1];
+        const urlParts = proofUrlToDelete.split("/");
+        const lastPart = urlParts[urlParts.length - 1];
+        const rawFileName = lastPart ? lastPart.split("?")[0] : "";
+
+        if (rawFileName) {
           const { error: deleteErr } = await serviceClient.storage
             .from("payment-proofs")
-            .remove([fileName]);
+            .remove([rawFileName]);
 
           if (!deleteErr) {
             fileDeletedFromStorage = true;
           }
         }
       } catch (storageErr) {
-        console.warn("Storage delete notice:", storageErr);
+        console.warn("Storage removal notice:", storageErr);
       }
     }
 
-    // 3. Update items_json to clear proof URL
+    // 3. Clean items_json
     if (itemsJsonObj && typeof itemsJsonObj === "object") {
       delete itemsJsonObj.payment_proof_url;
       delete itemsJsonObj.paymentProofUrl;
@@ -86,7 +103,7 @@ export async function POST(request: NextRequest) {
         payment_proof_url: null,
         items_json: updatedItemsJson,
       })
-      .eq("id", numericId);
+      .eq("id", order.id);
 
     if (updateErr) {
       return NextResponse.json({ error: updateErr.message }, { status: 500 });
@@ -94,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: "Bukti pembayaran berhasil dihapus dari storage",
+      message: "Bukti pembayaran berhasil dihapus",
       fileDeletedFromStorage,
     });
   } catch (err) {

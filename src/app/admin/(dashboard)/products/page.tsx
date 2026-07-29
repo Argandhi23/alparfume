@@ -36,7 +36,6 @@ export default function ProductsPage() {
   const [formIsBestSeller, setFormIsBestSeller] = useState(false);
   const [formPrice, setFormPrice] = useState<number>(45000);
   const [formStock, setFormStock] = useState<number>(10);
-  const [formShopeeLink, setFormShopeeLink] = useState("");
 
   // Image Crop States
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -325,7 +324,6 @@ export default function ProductsPage() {
     setFormIsSoldOut(false);
     setFormIsBestSeller(false);
     setFormStock(10);
-    setFormShopeeLink("");
     setFormImages([null, null, null]);
     setSlotStatuses(["idle", "idle", "idle"]);
     setFormError("");
@@ -358,7 +356,6 @@ export default function ProductsPage() {
     setFormIsSoldOut(product.is_sold_out || false);
     setFormIsBestSeller(product.is_best_seller || false);
     setFormStock(product.stock !== undefined && product.stock !== null ? product.stock : 10);
-    setFormShopeeLink(product.shopee_link || "");
 
     const firstVarPrice = product.product_variants && product.product_variants[0] ? product.product_variants[0].price : 45000;
     setFormPrice(firstVarPrice);
@@ -408,7 +405,7 @@ export default function ProductsPage() {
         is_sold_out: formIsSoldOut,
         is_best_seller: formIsBestSeller,
         stock: Number(formStock) || 0,
-        shopee_link: formShopeeLink.trim() || null,
+        shopee_link: null,
         image_url: imageUrlJson,
       };
 
@@ -864,17 +861,6 @@ export default function ProductsPage() {
                     placeholder="Vanilla, Cedarwood"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="block font-bold text-neutral-700 uppercase tracking-wider">Link Shopee (Opsional)</label>
-                <input
-                  type="url"
-                  value={formShopeeLink}
-                  onChange={(e) => setFormShopeeLink(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
-                  placeholder="https://shopee.co.id/..."
-                />
               </div>
 
               {/* Image Slots */}

@@ -18,7 +18,6 @@ export default function CategoriesPage() {
   const [categoryFormName, setCategoryFormName] = useState("");
   const [categoryFormSlug, setCategoryFormSlug] = useState("");
   const [categoryFormImageUrl, setCategoryFormImageUrl] = useState("");
-  const [categoryFormSortOrder, setCategoryFormSortOrder] = useState(0);
   const [savingCategory, setSavingCategory] = useState(false);
 
   // Banner Modal States
@@ -27,7 +26,6 @@ export default function CategoriesPage() {
   const [bannerFormTitle, setBannerFormTitle] = useState("");
   const [bannerFormImageUrl, setBannerFormImageUrl] = useState("");
   const [bannerFormLinkUrl, setBannerFormLinkUrl] = useState("");
-  const [bannerFormSortOrder, setBannerFormSortOrder] = useState(0);
   const [bannerFormIsActive, setBannerFormIsActive] = useState(true);
   const [savingBanner, setSavingBanner] = useState(false);
 
@@ -92,19 +90,31 @@ export default function CategoriesPage() {
     fetchData();
   }, [fetchData]);
 
+  const getCropContainerDimensions = () => {
+    const isBanner = cropModalState.targetType === "banner";
+    const containerW = isBanner ? 360 : 270;
+    const containerH = Math.round(containerW / cropModalState.aspectRatio);
+    return { containerW, containerH };
+  };
+
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
-    const containerSize = 320;
-    const ar = img.naturalWidth / img.naturalHeight;
-    let width = containerSize;
-    let height = containerSize;
-    if (ar > 1) {
-      width = containerSize * ar;
+    const { containerW, containerH } = getCropContainerDimensions();
+
+    const imgAR = img.naturalWidth / img.naturalHeight;
+    let width = containerW;
+    let height = containerH;
+
+    if (imgAR > cropModalState.aspectRatio) {
+      height = containerH;
+      width = containerH * imgAR;
     } else {
-      height = containerSize / ar;
+      width = containerW;
+      height = containerW / imgAR;
     }
+
     setDimensions({ width, height });
-    setPosition({ x: containerSize / 2, y: containerSize / 2 });
+    setPosition({ x: containerW / 2, y: containerH / 2 });
     setZoom(1);
   };
 
@@ -129,50 +139,99 @@ export default function CategoriesPage() {
     setIsDragging(false);
   };
 
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const dx = e.touches[0].clientX - dragStart.x;
+    const dy = e.touches[0].clientY - dragStart.y;
+    setPosition((prev) => ({
+      x: prev.x + dx,
+      y: prev.y + dy,
+    }));
+    setDragStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+  };
+
+  const [croppingImage, setCroppingImage] = useState(false);
+
   const handleCropSave = async () => {
     if (!imageRef.current) return;
-    const canvas = document.createElement("canvas");
-    
-    const targetW = 800;
-    const targetH = Math.round(800 / cropModalState.aspectRatio);
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const scale = targetW / 320;
-    const dx = (position.x - (dimensions.width * zoom) / 2) * scale;
-    const dy = (position.y - (dimensions.height * zoom) / 2) * scale;
-    const dw = (dimensions.width * zoom) * scale;
-    const dh = (dimensions.height * zoom) * scale;
-
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, targetW, targetH);
-    ctx.drawImage(imageRef.current, dx, dy, dw, dh);
-
-    canvas.toBlob(async (blob) => {
-      if (!blob) return;
-      const croppedFile = new File([blob], `cropped-${Date.now()}.jpg`, { type: "image/jpeg" });
+    setCroppingImage(true);
+    try {
+      const { containerW } = getCropContainerDimensions();
+      const canvas = document.createElement("canvas");
       
-      const bucket = cropModalState.targetType === "banner" ? "banner-images" : "category-images";
-      const filePath = `${cropModalState.targetType || "misc"}/${Date.now()}.jpg`;
+      const targetW = cropModalState.targetType === "banner" ? 1280 : 600;
+      const targetH = Math.round(targetW / cropModalState.aspectRatio);
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        setCroppingImage(false);
+        return;
+      }
+
+      const scale = targetW / containerW;
+      const dx = (position.x - (dimensions.width * zoom) / 2) * scale;
+      const dy = (position.y - (dimensions.height * zoom) / 2) * scale;
+      const dw = (dimensions.width * zoom) * scale;
+      const dh = (dimensions.height * zoom) * scale;
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.drawImage(imageRef.current, dx, dy, dw, dh);
+
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      let finalImageUrl = dataUrl;
 
       try {
-        const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, croppedFile);
-        if (uploadErr) throw uploadErr;
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, "image/jpeg", 0.85)
+        );
+        if (blob) {
+          const croppedFile = new File([blob], `cropped-${Date.now()}.jpg`, { type: "image/jpeg" });
+          const bucketCandidates = [
+            cropModalState.targetType === "banner" ? "banner-images" : "category-images",
+            "product-images"
+          ];
+          const filePath = `${cropModalState.targetType || "misc"}/${Date.now()}.jpg`;
 
-        const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
-        if (cropModalState.targetType === "banner") {
-          setBannerFormImageUrl(data.publicUrl);
-        } else if (cropModalState.targetType === "category") {
-          setCategoryFormImageUrl(data.publicUrl);
+          for (const bucket of bucketCandidates) {
+            const { error: uploadErr } = await supabase.storage.from(bucket).upload(filePath, croppedFile, { upsert: true });
+            if (!uploadErr) {
+              const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+              if (data?.publicUrl) {
+                finalImageUrl = data.publicUrl;
+                break;
+              }
+            }
+          }
         }
-      } catch (err) {
-        console.error("Upload error:", err);
-      } fontFinally: {
-        setCropModalState({ ...cropModalState, isOpen: false });
+      } catch (storageErr) {
+        console.warn("Storage upload notice (falling back to data URL):", storageErr);
       }
-    }, "image/jpeg", 0.90);
+
+      if (cropModalState.targetType === "banner") {
+        setBannerFormImageUrl(finalImageUrl);
+      } else if (cropModalState.targetType === "category") {
+        setCategoryFormImageUrl(finalImageUrl);
+      }
+      setCropModalState((prev) => ({ ...prev, isOpen: false }));
+    } catch (err) {
+      console.error("Crop error:", err);
+      alert("Gagal memproses gambar. Silakan coba lagi.");
+    } finally {
+      setCroppingImage(false);
+    }
   };
 
   const toggleBannerStatus = async (banner: Banner) => {
@@ -203,7 +262,6 @@ export default function CategoriesPage() {
               setBannerFormTitle("");
               setBannerFormImageUrl("");
               setBannerFormLinkUrl("");
-              setBannerFormSortOrder(0);
               setBannerFormIsActive(true);
               setIsBannerModalOpen(true);
             }}
@@ -257,7 +315,6 @@ export default function CategoriesPage() {
                           setBannerFormTitle(b.title || "");
                           setBannerFormImageUrl(b.image_url || "");
                           setBannerFormLinkUrl(b.link_url || "");
-                          setBannerFormSortOrder(b.sort_order || 0);
                           setBannerFormIsActive(b.is_active);
                           setIsBannerModalOpen(true);
                         }}
@@ -298,7 +355,6 @@ export default function CategoriesPage() {
               setCategoryFormName("");
               setCategoryFormSlug("");
               setCategoryFormImageUrl("");
-              setCategoryFormSortOrder(0);
               setIsCategoryModalOpen(true);
             }}
             className="bg-black text-white hover:bg-neutral-800 px-5 py-2 rounded-full text-xs uppercase tracking-wider font-semibold flex items-center gap-2 shadow-sm font-sans"
@@ -338,7 +394,6 @@ export default function CategoriesPage() {
                       setCategoryFormName(cat.name);
                       setCategoryFormSlug(cat.slug);
                       setCategoryFormImageUrl(cat.image_url || "");
-                      setCategoryFormSortOrder(cat.sort_order || 0);
                       setIsCategoryModalOpen(true);
                     }}
                     className="p-1.5 hover:bg-neutral-100 rounded-lg text-neutral-600 transition"
@@ -381,11 +436,15 @@ export default function CategoriesPage() {
                 e.preventDefault();
                 setSavingBanner(true);
                 try {
+                  const autoSortOrder = editingBanner
+                    ? (editingBanner.sort_order ?? 0)
+                    : banners.length + 1;
+
                   const payload = {
                     title: bannerFormTitle.trim(),
                     image_url: bannerFormImageUrl || null,
                     link_url: bannerFormLinkUrl.trim() || null,
-                    sort_order: Number(bannerFormSortOrder) || 0,
+                    sort_order: autoSortOrder,
                     is_active: bannerFormIsActive,
                   };
 
@@ -430,43 +489,53 @@ export default function CategoriesPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">Urutan Tampil</label>
-                <input
-                  type="number"
-                  value={bannerFormSortOrder}
-                  onChange={(e) => setBannerFormSortOrder(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
-                />
-              </div>
-
-              <div>
                 <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">Gambar Banner (16:9)</label>
                 {bannerFormImageUrl && (
-                  <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-neutral-200 mb-2">
+                  <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-neutral-200 mb-2 group">
                     <Image src={bannerFormImageUrl} alt="Preview" fill className="object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setBannerFormImageUrl("")}
+                      className="absolute top-2 right-2 bg-black/75 hover:bg-black text-white p-1 rounded-full text-xs shadow"
+                      title="Hapus Gambar"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const file = e.target.files[0];
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setCropModalState({
-                          isOpen: true,
-                          imageSrc: reader.result as string,
-                          aspectRatio: 16 / 9,
-                          title: "Crop Banner Promo (16:9)",
-                          targetType: "banner",
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                  className="text-xs text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200"
-                />
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setCropModalState({
+                            isOpen: true,
+                            imageSrc: reader.result as string,
+                            aspectRatio: 16 / 9,
+                            title: "Crop Banner Promo (16:9)",
+                            targetType: "banner",
+                          });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="text-xs text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200"
+                  />
+                  <div className="pt-1">
+                    <span className="text-[10px] text-neutral-400 font-medium block mb-1">Atau tempel URL Gambar:</span>
+                    <input
+                      type="text"
+                      value={bannerFormImageUrl}
+                      onChange={(e) => setBannerFormImageUrl(e.target.value)}
+                      placeholder="https://... atau data:image/..."
+                      className="w-full px-3 py-1.5 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:border-black font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-2">
@@ -520,11 +589,15 @@ export default function CategoriesPage() {
                 setSavingCategory(true);
                 try {
                   const slug = categoryFormSlug.trim() || categoryFormName.trim().toLowerCase().replace(/\s+/g, "-");
+                  const autoSortOrder = editingCategory
+                    ? (editingCategory.sort_order ?? 0)
+                    : categories.length + 1;
+
                   const payload = {
                     name: categoryFormName.trim(),
                     slug: slug,
                     image_url: categoryFormImageUrl || null,
-                    sort_order: Number(categoryFormSortOrder) || 0,
+                    sort_order: autoSortOrder,
                   };
 
                   if (editingCategory) {
@@ -573,43 +646,53 @@ export default function CategoriesPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">Urutan Tampil</label>
-                <input
-                  type="number"
-                  value={categoryFormSortOrder}
-                  onChange={(e) => setCategoryFormSortOrder(Number(e.target.value))}
-                  className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
-                />
-              </div>
-
-              <div>
                 <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">Gambar Background (3:4)</label>
                 {categoryFormImageUrl && (
-                  <div className="relative aspect-[3/4] w-28 rounded-xl overflow-hidden border border-neutral-200 mb-2">
+                  <div className="relative aspect-[3/4] w-28 rounded-xl overflow-hidden border border-neutral-200 mb-2 group">
                     <Image src={categoryFormImageUrl} alt="Preview" fill className="object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setCategoryFormImageUrl("")}
+                      className="absolute top-1 right-1 bg-black/75 hover:bg-black text-white p-1 rounded-full text-xs shadow"
+                      title="Hapus Gambar"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      const file = e.target.files[0];
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setCropModalState({
-                          isOpen: true,
-                          imageSrc: reader.result as string,
-                          aspectRatio: 3 / 4,
-                          title: "Crop Kategori (3:4)",
-                          targetType: "category",
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                  className="text-xs text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200"
-                />
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setCropModalState({
+                            isOpen: true,
+                            imageSrc: reader.result as string,
+                            aspectRatio: 3 / 4,
+                            title: "Crop Kategori (3:4)",
+                            targetType: "category",
+                          });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="text-xs text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200"
+                  />
+                  <div className="pt-1">
+                    <span className="text-[10px] text-neutral-400 font-medium block mb-1">Atau tempel URL Gambar:</span>
+                    <input
+                      type="text"
+                      value={categoryFormImageUrl}
+                      onChange={(e) => setCategoryFormImageUrl(e.target.value)}
+                      placeholder="https://... atau data:image/..."
+                      className="w-full px-3 py-1.5 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:border-black font-mono"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-neutral-100">
@@ -644,31 +727,40 @@ export default function CategoriesPage() {
             </div>
 
             <div className="flex justify-center py-2">
-              <div 
-                className="w-[320px] h-[320px] relative overflow-hidden bg-neutral-950 border border-neutral-700 rounded-xl select-none cursor-move"
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  ref={imageRef}
-                  src={cropModalState.imageSrc}
-                  alt="Crop"
-                  className="pointer-events-none select-none max-w-none max-h-none"
-                  style={{
-                    position: "absolute",
-                    left: `${position.x}px`,
-                    top: `${position.y}px`,
-                    width: `${dimensions.width * zoom}px`,
-                    height: `${dimensions.height * zoom}px`,
-                    transform: "translate(-50%, -50%)",
-                  }}
-                  onLoad={handleImageLoad}
-                />
-                <div className="absolute inset-0 border border-white/30 rounded-xl pointer-events-none" />
-              </div>
+              {(() => {
+                const { containerW, containerH } = getCropContainerDimensions();
+                return (
+                  <div 
+                    style={{ width: `${containerW}px`, height: `${containerH}px` }}
+                    className="relative overflow-hidden bg-neutral-950 border border-neutral-700 rounded-xl select-none cursor-move touch-none"
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      ref={imageRef}
+                      src={cropModalState.imageSrc}
+                      alt="Crop Preview"
+                      className="pointer-events-none select-none max-w-none max-h-none"
+                      style={{
+                        position: "absolute",
+                        left: `${position.x}px`,
+                        top: `${position.y}px`,
+                        width: `${dimensions.width * zoom}px`,
+                        height: `${dimensions.height * zoom}px`,
+                        transform: "translate(-50%, -50%)",
+                      }}
+                      onLoad={handleImageLoad}
+                    />
+                    <div className="absolute inset-0 border-2 border-white/40 rounded-xl pointer-events-none shadow-[inset_0_0_20px_rgba(0,0,0,0.5)]" />
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="space-y-2">
@@ -691,16 +783,18 @@ export default function CategoriesPage() {
               <button
                 type="button"
                 onClick={() => setCropModalState({ ...cropModalState, isOpen: false })}
-                className="px-5 py-2 rounded-full border border-neutral-700 hover:bg-neutral-800 text-neutral-300 font-bold"
+                className="px-5 py-2 rounded-full border border-neutral-700 hover:bg-neutral-800 text-neutral-300 font-bold text-xs"
               >
                 Batal
               </button>
               <button
                 type="button"
+                disabled={croppingImage}
                 onClick={handleCropSave}
-                className="px-5 py-2 rounded-full bg-white text-black hover:bg-neutral-200 font-bold"
+                className="px-5 py-2 rounded-full bg-white text-black hover:bg-neutral-200 font-bold text-xs flex items-center gap-2"
               >
-                Crop & Upload
+                {croppingImage && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {croppingImage ? "Memproses..." : "Crop & Upload"}
               </button>
             </div>
           </div>
