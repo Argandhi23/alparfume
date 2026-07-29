@@ -4,17 +4,8 @@ import { useState } from "react";
 import { ProductWithVariants, ProductVariant } from "@/lib/supabase";
 import { formatRupiah } from "@/lib/whatsapp";
 import { useCart } from "@/context/CartContext";
-import OrderFormModal from "./OrderFormModal";
-import { ShoppingBag } from "lucide-react";
-
-const SHOPEE_LINKS: Record<string, string> = {
-  "guavin": "https://id.shp.ee/15mjg5Mm",
-  "merry-kiss": "https://id.shp.ee/ZDXiBReF",
-  "serenity": "https://id.shp.ee/zryD5f34",
-  "elsyian-vanilla": "https://id.shp.ee/tqu9CvKH",
-  "elysian-vanilla": "https://id.shp.ee/tqu9CvKH",
-  "pink-romance": "https://id.shp.ee/CywogDXy",
-};
+import { CheckoutModal } from "./CheckoutModal";
+import { QrCode } from "lucide-react";
 
 interface ProductDetailsClientProps {
   product: ProductWithVariants;
@@ -26,7 +17,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
     sortedVariants[0] || null
   );
   const [showToast, setShowToast] = useState(false);
-  const [isBeliLangsungOpen, setIsBeliLangsungOpen] = useState(false);
+  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   
   const { addToCart } = useCart();
 
@@ -84,7 +75,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 font-sans">
       {/* Product Info Header */}
       <div className="space-y-2">
         <span className="text-xs text-[var(--text-muted)] font-medium tracking-wide font-sans block uppercase">
@@ -107,14 +98,14 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
       {/* Description */}
       <div className="space-y-2">
         <span className="text-xs uppercase tracking-widest text-[var(--text-muted)] font-sans block">
-          Description
+          Deskripsi Produk
         </span>
         <p className="text-sm text-[var(--foreground)]/80 leading-relaxed font-light font-sans">
           {product.description}
         </p>
       </div>
 
-      {/* Notes Section (Elegant Tag Style) */}
+      {/* Notes Section */}
       {product.notes && (
         <div className="space-y-3 border-t border-[var(--border)] pt-6">
           <span className="text-xs uppercase tracking-widest text-[var(--text-muted)] font-sans block">
@@ -191,29 +182,13 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
       {isSoldOut ? (
         <div className="pt-4 space-y-3">
           <div className="bg-red-50 border border-red-200 text-red-700 px-5 py-4 rounded-2xl text-xs font-sans leading-relaxed text-center font-medium shadow-sm">
-            Maaf, produk ini sedang kosong (stok habis). Hubungi kami via WhatsApp di footer untuk informasi ketersediaan kembali.
+            Maaf, produk ini sedang kosong (stok habis).
           </div>
-          
           <button
             disabled
             className="w-full bg-neutral-200 text-neutral-400 font-medium text-sm py-3 flex items-center justify-center gap-3 rounded-full font-sans cursor-not-allowed border border-transparent"
           >
-            Stok Habis (Tambah ke Keranjang)
-          </button>
-          
-          <button
-            disabled
-            className="w-full border border-neutral-200 bg-transparent text-neutral-400 font-medium text-sm py-3 flex items-center justify-center gap-3 rounded-full font-sans cursor-not-allowed"
-          >
-            Stok Habis (Beli Langsung)
-          </button>
-
-          <button
-            disabled
-            className="w-full border border-neutral-200 bg-transparent text-neutral-400 font-medium text-sm py-3 flex items-center justify-center gap-3 rounded-full font-sans cursor-not-allowed"
-          >
-            <ShoppingBag className="w-4 h-4 text-neutral-300" />
-            Stok Habis (Pesan via Shopee)
+            Stok Habis
           </button>
         </div>
       ) : selectedVariant ? (
@@ -225,28 +200,19 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
           )}
 
           <button
+            onClick={() => setIsCheckoutModalOpen(true)}
+            className="w-full bg-brandBlack hover:bg-neutral-800 text-brandWhite font-bold text-sm py-3.5 transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans shadow-md cursor-pointer"
+          >
+            <QrCode className="w-4 h-4" />
+            Pesan Sekarang (QRIS / COD Toko)
+          </button>
+
+          <button
             onClick={handleAddToCart}
-            className="w-full bg-brandBlack text-brandWhite font-medium text-sm py-3 hover:opacity-90 active:opacity-85 transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans"
+            className="w-full border border-brandBlack bg-transparent text-brandBlack font-semibold text-sm py-3 hover:bg-brandBlack hover:text-brandWhite transition-colors duration-200 flex items-center justify-center gap-3 rounded-full font-sans cursor-pointer"
           >
             Tambah ke Keranjang
           </button>
-          
-          <button
-            onClick={() => setIsBeliLangsungOpen(true)}
-            className="w-full border border-brandBlack bg-transparent text-brandBlack font-medium text-sm py-3 hover:bg-brandBlack hover:text-brandWhite transition-colors duration-200 flex items-center justify-center gap-3 rounded-full font-sans"
-          >
-            Beli Langsung
-          </button>
-
-          <a
-            href={product.shopee_link || SHOPEE_LINKS[product.slug] || "https://shopee.co.id/al.parfumeco"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full border border-[#ee4d2d] bg-transparent text-[#ee4d2d] font-medium text-sm py-3 hover:bg-[#ee4d2d] hover:text-white transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans text-center cursor-pointer"
-          >
-            <ShoppingBag className="w-4 h-4" />
-            Pesan via Shopee
-          </a>
         </div>
       ) : (
         <div className="text-sm text-[var(--text-muted)] py-4 font-light font-sans">
@@ -256,28 +222,19 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
 
       {/* Success Toast */}
       {showToast && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-brandBlack text-brandWhite border border-brandBorder px-6 py-3 shadow-xl text-xs uppercase tracking-widest font-semibold z-50 animate-fade-in">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-brandBlack text-brandWhite border border-brandBorder px-6 py-3 shadow-xl text-xs uppercase tracking-widest font-semibold z-50 animate-fade-in rounded-full">
           Ditambahkan ke keranjang!
         </div>
       )}
 
-      {/* Beli Langsung Order Modal */}
-      {isBeliLangsungOpen && selectedVariant && (
-        <OrderFormModal
-          isOpen={isBeliLangsungOpen}
-          onClose={() => setIsBeliLangsungOpen(false)}
-          items={[
-            {
-              id: `${product.slug}-${selectedVariant.size_ml}`,
-              productName: product.name,
-              productSlug: product.slug,
-              imageUrl: firstImageUrl,
-              sizeMl: selectedVariant.size_ml,
-              price: selectedVariant.price,
-              quantity: 1,
-            },
-          ]}
-          totalPrice={selectedVariant.price}
+      {/* Internal QRIS & COD Checkout Modal */}
+      {isCheckoutModalOpen && selectedVariant && (
+        <CheckoutModal
+          isOpen={isCheckoutModalOpen}
+          onClose={() => setIsCheckoutModalOpen(false)}
+          product={product}
+          selectedVariant={selectedVariant}
+          quantity={1}
         />
       )}
     </div>

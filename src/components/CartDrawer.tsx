@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { X, Plus, Minus, Trash2 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatRupiah } from "@/lib/whatsapp";
-import OrderFormModal from "./OrderFormModal";
+import { CheckoutModal } from "./CheckoutModal";
 import Image from "next/image";
 
 interface CartDrawerProps {
@@ -154,19 +154,18 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
               onClick={() => setIsOrderModalOpen(true)}
               className="w-full bg-brandBlack text-brandWhite hover:opacity-90 py-3 text-sm font-medium transition-all duration-200 rounded-full font-sans"
             >
-              Pesan via WhatsApp
+              Checkout Sekarang
             </button>
           </div>
         )}
       </div>
 
-      {/* Order Validation Form Modal */}
+      {/* Cart Checkout Modal */}
       {isOrderModalOpen && (
-        <OrderFormModal
+        <CheckoutModal
           isOpen={isOrderModalOpen}
           onClose={() => setIsOrderModalOpen(false)}
-          items={items}
-          totalPrice={totalPrice}
+          cartItems={items}
           onSuccess={handleOrderSuccess}
         />
       )}

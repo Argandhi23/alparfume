@@ -2,16 +2,18 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Sun, Moon, ShoppingBag, ChevronRight } from "lucide-react";
+import { Sun, Moon, ShoppingBag, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTheme } from "@/context/ThemeContext";
 import { useCart } from "@/context/CartContext";
 import CartDrawer from "./CartDrawer";
+import SearchModal from "./SearchModal";
 
 export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   const { theme, toggleTheme } = useTheme();
   const { totalItems } = useCart();
@@ -101,6 +103,18 @@ export default function Navbar() {
                 About
               </Link>
             </div>
+
+            {/* Search Icon */}
+            <button
+              onClick={() => setIsSearchOpen(true)}
+              className={`text-brandBlack hover:opacity-75 transition-all p-2 hover:bg-brandGray rounded-full transition-all duration-300 ${
+                isOpen ? "opacity-0 pointer-events-none scale-90" : "opacity-100"
+              }`}
+              aria-label="Cari Produk"
+              title="Cari Parfum"
+            >
+              <Search className="w-4 h-4" />
+            </button>
 
             {/* Theme Toggle */}
             <button
@@ -194,8 +208,9 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* Cart Drawer Component */}
+      {/* Cart & Search Component Drawers */}
       <CartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
+      <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
     </>
   );
 }
