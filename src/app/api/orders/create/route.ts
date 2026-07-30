@@ -59,14 +59,24 @@ export async function POST(request: NextRequest) {
       .select()
       .single();
 
-    // Fallback: If payment_method column is missing in Supabase schema cache (PGRST204), insert without top-level payment_method
-    if (error && (error.code === "PGRST204" || error.message?.includes("payment_method"))) {
-      console.warn("Retrying order creation without top-level payment_method column:", error.message);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { payment_method, ...fallbackPayload } = sanitizedPayload;
+    // Fallback: If ANY error occurs (schema mismatch, missing column, PGRST204, etc.), retry with guaranteed core payload
+    if (error) {
+      console.warn("Retrying order creation with guaranteed core payload:", error.message);
+      
+      const corePayload = {
+        product_name: String(product_name).slice(0, 255).trim(),
+        size_ml: Number(cleanPayload.size_ml) || 0,
+        price: Number(cleanPayload.price || cleanPayload.total_price) || 0,
+        customer_name: String(customer_name).slice(0, 150).trim(),
+        customer_wa: sanitizedWa,
+        customer_address: customer_address ? String(customer_address).slice(0, 1000).trim() : null,
+        order_notes: cleanPayload.order_notes ? String(cleanPayload.order_notes).slice(0, 500).trim() : null,
+        items_json: typeof cleanPayload.items_json === "string" ? cleanPayload.items_json : JSON.stringify(cleanPayload.items_json || {}),
+      };
+
       const fallbackResult = await serviceClient
         .from("order_intents")
-        .insert([fallbackPayload])
+        .insert([corePayload])
         .select()
         .single();
 

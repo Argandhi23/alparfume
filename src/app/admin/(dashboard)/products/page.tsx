@@ -60,7 +60,21 @@ export default function ProductsPage() {
         .select("*")
         .order("sort_order", { ascending: true });
       if (!error && data) {
-        setCategories(data);
+        const catList = [...data];
+        const hasSample = catList.some(
+          (c) => c.slug === "sample" || c.name.toLowerCase().includes("sample")
+        );
+        if (!hasSample) {
+          catList.unshift({
+            id: "c1c1c1c1-c1c1-11ee-8656-0242ac130002",
+            name: "Sample",
+            slug: "sample",
+            sort_order: 1,
+            image_url: null,
+            bg_color: "bg-neutral-300",
+          });
+        }
+        setCategories(catList);
       }
     } catch (err) {
       console.error("Gagal mengambil data kategori:", err);

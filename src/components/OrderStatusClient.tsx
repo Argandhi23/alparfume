@@ -68,22 +68,56 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const [uploadError, setUploadError] = useState("");
   const [isQrisZoomed, setIsQrisZoomed] = useState(false);
 
-  // Poll database for real-time status & resi updates
+  // Poll database for real-time status & resi updates with multi-tier lookup
   const fetchOrderFromDb = useCallback(async () => {
     try {
+      let fetchedData: OrderIntent | null = null;
+
+      // 1. Try numeric ID if valid integer
       const numericId = parseInt(orderId, 10);
-      if (isNaN(numericId)) return;
+      if (!isNaN(numericId) && numericId > 0 && numericId <= 2147483647) {
+        const { data } = await supabase
+          .from("order_intents")
+          .select("*")
+          .eq("id", numericId)
+          .maybeSingle();
 
-      const { data, error } = await supabase
-        .from("order_intents")
-        .select("*")
-        .eq("id", numericId)
-        .single();
+        if (data) {
+          fetchedData = data as OrderIntent;
+        }
+      }
 
-      if (!error && data) {
-        setOrder(data as OrderIntent);
-        if (data.payment_proof_url) {
-          setProofUrl(data.payment_proof_url);
+      // 2. Try order_code or items_json match
+      if (!fetchedData && orderId) {
+        const { data: matchedRows } = await supabase
+          .from("order_intents")
+          .select("*")
+          .or(`order_code.eq.${orderId},items_json.ilike.%${orderId}%`)
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (matchedRows && matchedRows.length > 0) {
+          fetchedData = matchedRows[0] as OrderIntent;
+        }
+      }
+
+      // 3. Fallback: Search for the most recent order intent created in database
+      if (!fetchedData) {
+        const { data: recentOrders } = await supabase
+          .from("order_intents")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (recentOrders && recentOrders.length > 0) {
+          fetchedData = recentOrders[0] as OrderIntent;
+        }
+      }
+
+      if (fetchedData) {
+        setOrder(fetchedData);
+        if (fetchedData.payment_proof_url) {
+          setProofUrl(fetchedData.payment_proof_url);
         }
       }
     } catch (err) {
@@ -125,11 +159,11 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       }
     }
 
-    // 2. Initial fetch & setup polling every 7 seconds
+    // 2. Initial fetch & setup polling every 5 seconds for fast live updates
     fetchOrderFromDb();
     const interval = setInterval(() => {
       fetchOrderFromDb();
-    }, 7000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [orderId, initialOrder, fetchOrderFromDb]);
@@ -193,6 +227,20 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     }
   };
 
+  // Parse nested items_json metadata if present
+  let itemsMeta: Record<string, unknown> = {};
+  if (order?.items_json) {
+    try {
+      let parsed = typeof order.items_json === "string" ? JSON.parse(order.items_json) : order.items_json;
+      if (typeof parsed === "string") {
+        parsed = JSON.parse(parsed);
+      }
+      if (typeof parsed === "object" && !Array.isArray(parsed)) {
+        itemsMeta = parsed;
+      }
+    } catch {}
+  }
+
   const isPickup =
     order?.payment_method === "cod_pickup" ||
     order?.courier_name === "Ambil di Toko" ||
@@ -201,11 +249,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       (order.items_json.includes('"payment_method":"cod_pickup"') ||
         order.items_json.includes('"delivery_method":"pickup"')));
 
-  // Order Tracking Status Calculation
-  const isPaid = order?.payment_status === "paid";
-  const isShipped = !!order?.tracking_number || order?.fulfillment_status === "shipped" || order?.fulfillment_status === "dikirim";
-  const isCompleted = order?.fulfillment_status === "completed" || order?.fulfillment_status === "selesai";
-  const isPacking = isPaid || order?.fulfillment_status === "packing" || order?.fulfillment_status === "dikemas";
+  // Order Tracking Status Calculation from top-level & items_json fields
+  const effectivePaymentStatus = order?.payment_status || itemsMeta.payment_status || itemsMeta.paymentStatus;
+  const effectiveTrackingNumber = order?.tracking_number || itemsMeta.tracking_number || itemsMeta.trackingNumber;
+  const effectiveFulfillmentStatus = order?.fulfillment_status || itemsMeta.fulfillment_status || itemsMeta.fulfillmentStatus;
+
+  const isPaid = effectivePaymentStatus === "paid";
+  const isShipped = !!effectiveTrackingNumber || effectiveFulfillmentStatus === "shipped" || effectiveFulfillmentStatus === "dikirim";
+  const isCompleted = effectiveFulfillmentStatus === "completed" || effectiveFulfillmentStatus === "selesai";
+  const isPacking = isPaid || effectiveFulfillmentStatus === "packing" || effectiveFulfillmentStatus === "dikemas";
 
   let currentStep = 1; // 1: Menunggu/Dibuat, 2: Dikemas, 3: Dikirim, 4: Selesai
   if (isCompleted) {
@@ -292,7 +344,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         },
         {
           title: "Dikirim",
-          desc: order?.tracking_number ? `Resi: ${order.tracking_number}` : "Kurir ekspedisi",
+          desc: effectiveTrackingNumber ? `Resi: ${effectiveTrackingNumber}` : "Kurir ekspedisi",
           step: 3,
           icon: Truck,
         },
@@ -325,14 +377,14 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         </div>
       </div>
 
-      {/* LIVE ORDER TRACKING PROGRESS STEPPER (Minimalist Monochrome B&W) */}
-      <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
-        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-          <div>
+      {/* LIVE ORDER TRACKING PROGRESS STEPPER (Only for Courier Shipping, Hidden for Store Pickup) */}
+      {!isPickup && (
+        <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
+          <div className="border-b border-neutral-100 pb-3">
             <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400 block">
               Status Pengiriman Real-Time
             </span>
-            <h2 className="text-base sm:text-lg font-bold text-neutral-900">
+            <h2 className="text-base sm:text-lg font-bold text-neutral-900 mt-0.5">
               {isCompleted
                 ? "Pesanan Anda Telah Selesai"
                 : isShipped
@@ -342,57 +394,53 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                 : "Menunggu Verifikasi Pembayaran"}
             </h2>
           </div>
-          <span className="text-[10px] text-neutral-400 font-mono flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-            Live Update
-          </span>
-        </div>
 
-        {/* Stepper Timeline Bar */}
-        <div className="relative py-2">
-          {/* Track background line */}
-          <div className="absolute top-5 left-6 right-6 h-0.5 bg-neutral-200 -z-0 hidden sm:block" />
+          {/* Stepper Timeline Bar */}
+          <div className="relative py-2">
+            {/* Track background line */}
+            <div className="absolute top-5 left-6 right-6 h-0.5 bg-neutral-200 -z-0 hidden sm:block" />
 
-          <div className={`grid ${isPickup ? "grid-cols-3" : "grid-cols-4"} gap-2 sm:gap-4 relative z-10`}>
-            {steps.map((s) => {
-              const Icon = s.icon;
-              const isPast = currentStep > s.step;
-              const isCurrent = currentStep === s.step;
+            <div className="grid grid-cols-4 gap-2 sm:gap-4 relative z-10">
+              {steps.map((s) => {
+                const Icon = s.icon;
+                const isPast = currentStep > s.step;
+                const isCurrent = currentStep === s.step;
 
-              return (
-                <div key={s.step} className="flex flex-col items-center text-center space-y-2">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                      isPast
-                        ? "bg-black text-white shadow-xs"
-                        : isCurrent
-                        ? "bg-black text-white ring-4 ring-neutral-200 font-bold shadow-md"
-                        : "bg-neutral-100 text-neutral-400 border border-neutral-200"
-                    }`}
-                  >
-                    {isPast ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
-                  </div>
-                  <div>
-                    <span
-                      className={`text-xs font-bold block ${
-                        isCurrent ? "text-black" : isPast ? "text-neutral-800" : "text-neutral-400"
+                return (
+                  <div key={s.step} className="flex flex-col items-center text-center space-y-2">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                        isPast
+                          ? "bg-black text-white shadow-xs"
+                          : isCurrent
+                          ? "bg-black text-white ring-4 ring-neutral-200 font-bold shadow-md"
+                          : "bg-neutral-100 text-neutral-400 border border-neutral-200"
                       }`}
                     >
-                      {s.title}
-                    </span>
-                    <span className="text-[10px] text-neutral-400 block line-clamp-1 mt-0.5">
-                      {s.desc}
-                    </span>
+                      {isPast ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <span
+                        className={`text-xs font-bold block ${
+                          isCurrent ? "text-black" : isPast ? "text-neutral-800" : "text-neutral-400"
+                        }`}
+                      >
+                        {s.title}
+                      </span>
+                      <span className="text-[10px] text-neutral-400 block line-clamp-1 mt-0.5">
+                        {s.desc}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Resi Tracking Box if Available */}
-      {order?.tracking_number ? (
+      {effectiveTrackingNumber ? (
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 space-y-4 shadow-xs">
           <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
             <div>
@@ -400,16 +448,16 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                 Nomor Resi Pengiriman
               </span>
               <h2 className="text-xl font-bold text-black font-mono mt-0.5">
-                {order.tracking_number}
+                {String(effectiveTrackingNumber)}
               </h2>
             </div>
             <span className="text-xs font-semibold text-neutral-500 uppercase">
-              {order.courier_name || "Ekspedisi"}
+              {order?.courier_name || "Ekspedisi"}
             </span>
           </div>
 
           <button
-            onClick={() => handleCopyResi(order.tracking_number!)}
+            onClick={() => handleCopyResi(String(effectiveTrackingNumber))}
             className="bg-black hover:bg-neutral-800 text-white px-5 py-2.5 rounded-full text-xs font-semibold uppercase tracking-widest flex items-center gap-2 transition-all cursor-pointer shadow-xs"
           >
             <Copy className="w-3.5 h-3.5" />
@@ -503,7 +551,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
             </div>
           </div>
         </div>
-      ) : order?.payment_method === "qris" && order?.payment_status !== "paid" ? (
+      ) : order?.payment_method === "qris" && effectivePaymentStatus !== "paid" ? (
         /* QRIS PAYMENT & UPLOAD PROOF SECTION (Crisp HD QRIS Image & Minimalist B&W) */
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
           <div className="flex items-center justify-between border-b border-neutral-100 pb-4">

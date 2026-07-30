@@ -10,8 +10,12 @@ import Link from "next/link";
 export default function DashboardOverview() {
   const [products, setProducts] = useState<ProductWithVariants[]>([]);
   const [statsData, setStatsData] = useState<{ date: string; sales: number; revenue: number }[]>([]);
-  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const [completedRevenue, setCompletedRevenue] = useState(0);
+  const [inProgressRevenue, setInProgressRevenue] = useState(0);
+  const [completedOrdersCount, setCompletedOrdersCount] = useState(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
 
   useEffect(() => {
     fetchOverviewData();
@@ -28,7 +32,7 @@ export default function DashboardOverview() {
         fetch("/api/admin/stats", {
           headers: { Authorization: `Bearer ${token || ""}` },
         }),
-        supabase.from("order_intents").select("payment_status").limit(100),
+        supabase.from("order_intents").select("price, total_price, payment_status, fulfillment_status, items_json").limit(200),
       ]);
 
       if (productsRes.data) {
@@ -41,8 +45,39 @@ export default function DashboardOverview() {
       }
 
       if (intentsRes.data) {
-        const pending = intentsRes.data.filter((i) => i.payment_status !== "paid").length;
-        setPendingOrdersCount(pending);
+        let completedRev = 0;
+        let inProgressRev = 0;
+        let completedCount = 0;
+        let pendingCount = 0;
+
+        intentsRes.data.forEach((int) => {
+          let meta: Record<string, unknown> = {};
+          if (int.items_json) {
+            try {
+              const parsed = typeof int.items_json === "string" ? JSON.parse(int.items_json) : int.items_json;
+              if (typeof parsed === "object" && !Array.isArray(parsed)) meta = parsed as Record<string, unknown>;
+            } catch {}
+          }
+
+          const priceNum = Number(int.total_price || int.price || meta.grandTotal || meta.total_price) || 0;
+          const fulfillment = int.fulfillment_status || meta.fulfillment_status || meta.fulfillmentStatus || "pending";
+          const payment = int.payment_status || meta.payment_status || meta.paymentStatus || "pending_verification";
+
+          if (fulfillment === "completed" || fulfillment === "selesai") {
+            completedRev += priceNum;
+            completedCount += 1;
+          } else {
+            inProgressRev += priceNum;
+            if (payment !== "paid") {
+              pendingCount += 1;
+            }
+          }
+        });
+
+        setCompletedRevenue(completedRev);
+        setInProgressRevenue(inProgressRev);
+        setCompletedOrdersCount(completedCount);
+        setPendingOrdersCount(pendingCount);
       }
     } catch (err) {
       console.error("Gagal memuat data dashboard overview:", err);
@@ -51,8 +86,6 @@ export default function DashboardOverview() {
     }
   };
 
-  const totalRevenue = statsData.reduce((sum, item) => sum + item.revenue, 0);
-  const totalSalesCount = statsData.reduce((sum, item) => sum + item.sales, 0);
   const activeProductsCount = products.filter((p) => p.is_active).length;
   const lowStockProducts = products.filter((p) => p.is_active && (p.stock ?? 10) <= 5);
 
@@ -108,28 +141,28 @@ export default function DashboardOverview() {
 
       {/* Ringkasan Bisnis Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Total Penjualan */}
+        {/* Pendapatan Pesanan Selesai */}
         <div className="border border-neutral-200/80 bg-white rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-extrabold">Volume Penjualan</span>
-            <div className="w-8 h-8 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-700">
-              <ShoppingBag className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-bold font-plus-jakarta text-neutral-900">{totalSalesCount} Pesanan</div>
-          <span className="text-[10px] text-neutral-400 font-medium">Transaksi berhasil diproses</span>
-        </div>
-
-        {/* Total Pendapatan */}
-        <div className="border border-neutral-200/80 bg-white rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-extrabold">Total Pendapatan</span>
+            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-extrabold">Pendapatan Selesai</span>
             <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-bold font-plus-jakarta text-emerald-600">{formatRupiah(totalRevenue)}</div>
-          <span className="text-[10px] text-emerald-600 font-medium">Estimasi omset keseluruhan</span>
+          <div className="text-2xl font-bold font-plus-jakarta text-emerald-600">{formatRupiah(completedRevenue)}</div>
+          <span className="text-[10px] text-emerald-600 font-semibold">{completedOrdersCount} Pesanan Berhasil Selesai</span>
+        </div>
+
+        {/* Pendapatan Dalam Proses */}
+        <div className="border border-neutral-200/80 bg-white rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-extrabold">Omset Dalam Proses</span>
+            <div className="w-8 h-8 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+              <ShoppingBag className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-2xl font-bold font-plus-jakarta text-blue-600">{formatRupiah(inProgressRevenue)}</div>
+          <span className="text-[10px] text-neutral-400 font-medium">Sedang dikemas & dikirim</span>
         </div>
 
         {/* Status Pesanan Menunggu */}

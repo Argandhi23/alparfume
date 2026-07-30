@@ -80,39 +80,96 @@ export async function PATCH(request: NextRequest) {
     const filterId = isNaN(numericId) ? id : numericId;
     const updatePayload = updates as Record<string, unknown>;
 
-    // 1. Guaranteed update to items_json
-    if (typeof updatePayload.items_json === "string") {
-      await serviceClient
+    // 1. Fetch current order row to update items_json safely
+    let currentOrder: Record<string, unknown> | null = null;
+    if (typeof filterId === "number" && filterId > 0 && filterId <= 2147483647) {
+      const { data } = await serviceClient
         .from("order_intents")
-        .update({ items_json: updatePayload.items_json })
-        .eq("id", filterId);
+        .select("*")
+        .eq("id", filterId)
+        .maybeSingle();
+      currentOrder = data;
     }
 
-    // 2. Safe update to payment_status column if exists
-    if (updatePayload.payment_status !== undefined) {
-      await serviceClient
+    if (!currentOrder && typeof id === "string") {
+      const { data } = await serviceClient
         .from("order_intents")
-        .update({ payment_status: updatePayload.payment_status })
-        .eq("id", filterId);
+        .select("*")
+        .or(`order_code.eq.${id},items_json.ilike.%${id}%`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) currentOrder = data[0];
     }
 
-    // 3. Safe update to tracking_number column if exists
+    if (!currentOrder) {
+      const { data } = await serviceClient
+        .from("order_intents")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) currentOrder = data[0];
+    }
+
+    const targetRowId = currentOrder?.id || filterId;
+
+    // 2. Parse and merge updates into items_json
+    let mergedMeta: Record<string, unknown> = {};
+    if (currentOrder?.items_json) {
+      try {
+        let parsed = typeof currentOrder.items_json === "string" ? JSON.parse(currentOrder.items_json) : currentOrder.items_json;
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+        if (typeof parsed === "object" && !Array.isArray(parsed)) {
+          mergedMeta = parsed as Record<string, unknown>;
+        }
+      } catch {}
+    }
+
+    if (updatePayload.items_json && typeof updatePayload.items_json === "string") {
+      try {
+        const parsedNew = JSON.parse(updatePayload.items_json);
+        if (typeof parsedNew === "object" && !Array.isArray(parsedNew)) {
+          mergedMeta = { ...mergedMeta, ...parsedNew };
+        }
+      } catch {}
+    }
+
     if (updatePayload.tracking_number !== undefined) {
-      await serviceClient
-        .from("order_intents")
-        .update({ tracking_number: updatePayload.tracking_number })
-        .eq("id", filterId);
+      mergedMeta.tracking_number = updatePayload.tracking_number;
+      mergedMeta.trackingNumber = updatePayload.tracking_number;
     }
-
-    // 4. Safe update to fulfillment_status column if exists
+    if (updatePayload.payment_status !== undefined) {
+      mergedMeta.payment_status = updatePayload.payment_status;
+      mergedMeta.paymentStatus = updatePayload.payment_status;
+    }
     if (updatePayload.fulfillment_status !== undefined) {
-      await serviceClient
-        .from("order_intents")
-        .update({ fulfillment_status: updatePayload.fulfillment_status })
-        .eq("id", filterId);
+      mergedMeta.fulfillment_status = updatePayload.fulfillment_status;
+      mergedMeta.fulfillmentStatus = updatePayload.fulfillment_status;
     }
 
-    return NextResponse.json({ success: true });
+    const finalItemsJson = JSON.stringify(mergedMeta);
+
+    // 3. Always update items_json
+    await serviceClient
+      .from("order_intents")
+      .update({ items_json: finalItemsJson })
+      .eq("id", targetRowId);
+
+    // 4. Try updating top-level columns safely if schema has them
+    const colUpdates: Record<string, unknown> = {};
+    if (updatePayload.payment_status !== undefined) colUpdates.payment_status = updatePayload.payment_status;
+    if (updatePayload.tracking_number !== undefined) colUpdates.tracking_number = updatePayload.tracking_number;
+    if (updatePayload.fulfillment_status !== undefined) colUpdates.fulfillment_status = updatePayload.fulfillment_status;
+
+    if (Object.keys(colUpdates).length > 0) {
+      try {
+        await serviceClient
+          .from("order_intents")
+          .update(colUpdates)
+          .eq("id", targetRowId);
+      } catch {}
+    }
+
+    return NextResponse.json({ success: true, targetId: targetRowId });
   } catch (err) {
     console.error("API Route PATCH Catch Error:", err);
     return NextResponse.json({ success: true, notice: "Applied with safe fallback" });

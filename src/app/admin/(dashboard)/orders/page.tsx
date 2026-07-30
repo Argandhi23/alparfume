@@ -370,6 +370,23 @@ export default function OrdersPage() {
       const cleanResi = resiInput.trim();
       const authHeader = await getAuthHeader();
 
+      // Build merged items_json payload to guarantee persistence across schema variations
+      let currentMeta: Record<string, unknown> = {};
+      if (selectedIntentForResi.items_json) {
+        try {
+          const parsed = typeof selectedIntentForResi.items_json === "string" ? JSON.parse(selectedIntentForResi.items_json) : selectedIntentForResi.items_json;
+          if (typeof parsed === "object" && !Array.isArray(parsed)) {
+            currentMeta = parsed as Record<string, unknown>;
+          }
+        } catch {}
+      }
+      currentMeta.tracking_number = cleanResi || null;
+      currentMeta.trackingNumber = cleanResi || null;
+      currentMeta.fulfillment_status = cleanResi ? "shipped" : "pending";
+      currentMeta.fulfillmentStatus = cleanResi ? "shipped" : "pending";
+
+      const updatedItemsJson = JSON.stringify(currentMeta);
+
       const res = await fetch("/api/admin/intents", {
         method: "PATCH",
         headers: {
@@ -380,7 +397,8 @@ export default function OrdersPage() {
           id: selectedIntentForResi.id,
           updates: { 
             tracking_number: cleanResi || null,
-            fulfillment_status: cleanResi ? "shipped" : "pending"
+            fulfillment_status: cleanResi ? "shipped" : "pending",
+            items_json: updatedItemsJson,
           },
         }),
       });
@@ -391,7 +409,8 @@ export default function OrdersPage() {
           .from("order_intents")
           .update({ 
             tracking_number: cleanResi || null,
-            fulfillment_status: cleanResi ? "shipped" : "pending"
+            fulfillment_status: cleanResi ? "shipped" : "pending",
+            items_json: updatedItemsJson,
           })
           .eq("id", selectedIntentForResi.id);
       }
@@ -402,7 +421,8 @@ export default function OrdersPage() {
             ? { 
                 ...item, 
                 tracking_number: cleanResi || null,
-                fulfillment_status: cleanResi ? "shipped" : "pending"
+                fulfillment_status: cleanResi ? "shipped" : "pending",
+                items_json: updatedItemsJson,
               }
             : item
         )
@@ -435,6 +455,23 @@ export default function OrdersPage() {
         localStorage.setItem(`alparfume_intent_status_${intent.id}`, "paid");
       }
 
+      // Build merged items_json payload
+      let currentMeta: Record<string, unknown> = {};
+      if (intent.items_json) {
+        try {
+          const parsed = typeof intent.items_json === "string" ? JSON.parse(intent.items_json) : intent.items_json;
+          if (typeof parsed === "object" && !Array.isArray(parsed)) {
+            currentMeta = parsed as Record<string, unknown>;
+          }
+        } catch {}
+      }
+      currentMeta.payment_status = "paid";
+      currentMeta.paymentStatus = "paid";
+      currentMeta.fulfillment_status = "packing";
+      currentMeta.fulfillmentStatus = "packing";
+
+      const updatedItemsJson = JSON.stringify(currentMeta);
+
       const authHeader = await getAuthHeader();
       const res = await fetch("/api/admin/intents", {
         method: "PATCH",
@@ -444,21 +481,34 @@ export default function OrdersPage() {
         },
         body: JSON.stringify({
           id: intent.id,
-          updates: { payment_status: "paid" },
+          updates: { 
+            payment_status: "paid",
+            fulfillment_status: "packing",
+            items_json: updatedItemsJson,
+          },
         }),
       });
 
       if (!res.ok) {
         await supabase
           .from("order_intents")
-          .update({ payment_status: "paid" })
+          .update({ 
+            payment_status: "paid",
+            fulfillment_status: "packing",
+            items_json: updatedItemsJson,
+          })
           .eq("id", intent.id);
       }
 
       setIntents((prev) =>
         prev.map((item) =>
           item.id === intent.id
-            ? { ...item, payment_status: "paid" }
+            ? { 
+                ...item, 
+                payment_status: "paid",
+                fulfillment_status: "packing",
+                items_json: updatedItemsJson,
+              }
             : item
         )
       );
@@ -466,6 +516,115 @@ export default function OrdersPage() {
     } catch (err) {
       console.error("Gagal konfirmasi lunas:", err);
       alert("Terjadi kesalahan saat mengonfirmasi lunas.");
+    }
+  };
+
+  const handleCompleteOrder = async (intent: OrderIntent) => {
+    if (
+      !confirm(
+        `Selesaikan pesanan #${intent.order_code || intent.id}? ${
+          intent.payment_proof_url
+            ? "Ini akan menandai pesanan selesai dan otomatis menghapus foto bukti pembayaran dari storage."
+            : "Ini akan menandai pesanan selesai."
+        }`
+      )
+    )
+      return;
+
+    try {
+      const authHeader = await getAuthHeader();
+
+      let currentMeta: Record<string, unknown> = {};
+      if (intent.items_json) {
+        try {
+          const parsed =
+            typeof intent.items_json === "string"
+              ? JSON.parse(intent.items_json)
+              : intent.items_json;
+          if (typeof parsed === "object" && !Array.isArray(parsed)) {
+            currentMeta = parsed as Record<string, unknown>;
+          }
+        } catch {}
+      }
+
+      currentMeta.fulfillment_status = "completed";
+      currentMeta.fulfillmentStatus = "completed";
+      currentMeta.payment_status = "paid";
+      currentMeta.paymentStatus = "paid";
+      currentMeta.payment_proof_url = null;
+      currentMeta.paymentProofUrl = null;
+
+      const updatedItemsJson = JSON.stringify(currentMeta);
+
+      // 1. Update DB fulfillment status & payment status
+      const res = await fetch("/api/admin/intents", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...authHeader,
+        },
+        body: JSON.stringify({
+          id: intent.id,
+          updates: {
+            fulfillment_status: "completed",
+            payment_status: "paid",
+            payment_proof_url: null,
+            items_json: updatedItemsJson,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        await supabase
+          .from("order_intents")
+          .update({
+            fulfillment_status: "completed",
+            payment_status: "paid",
+            payment_proof_url: null,
+            items_json: updatedItemsJson,
+          })
+          .eq("id", intent.id);
+      }
+
+      // 2. If proof image exists in storage, delete it from storage bucket
+      if (intent.payment_proof_url) {
+        try {
+          await fetch("/api/admin/intents/delete-proof", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...authHeader,
+            },
+            body: JSON.stringify({ orderId: intent.id }),
+          });
+        } catch (err) {
+          console.warn("Notice deleting proof image on complete:", err);
+        }
+      }
+
+      // 3. Update local state
+      setIntents((prev) =>
+        prev.map((item) =>
+          item.id === intent.id
+            ? {
+                ...item,
+                fulfillment_status: "completed",
+                payment_status: "paid",
+                payment_proof_url: null,
+                items_json: updatedItemsJson,
+              }
+            : item
+        )
+      );
+
+      if (viewingProofIntent?.id === intent.id) {
+        setViewingProofIntent(null);
+      }
+
+      fetchIntents(intentsPage, true);
+    } catch (err) {
+      console.error("Gagal menyelesaikan pesanan:", err);
+      alert("Terjadi kesalahan saat menyelesaikan pesanan.");
     }
   };
 
@@ -804,6 +963,9 @@ export default function OrdersPage() {
                   if (parsedMeta && !Array.isArray(parsedMeta) && typeof parsedMeta.payment_proof_url === "string") {
                     effectiveProofUrl = parsedMeta.payment_proof_url;
                   }
+
+                  const effectiveFulfillmentStatus = int.fulfillment_status || (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.fulfillment_status || parsedMeta.fulfillmentStatus || "pending") : "pending");
+                  const effectiveTrackingNumber = int.tracking_number || (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.tracking_number || parsedMeta.trackingNumber || null) : null);
                   if (!effectiveProofUrl && itemsJsonString) {
                     const urlMatch = itemsJsonString.match(/https?:\/\/[^\s"'\\]+/i) || itemsJsonString.match(/data:image\/[a-zA-Z]+;base64,[^\s"'\\]+/i);
                     if (urlMatch) {
@@ -926,34 +1088,26 @@ export default function OrdersPage() {
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
-                        ) : effectivePaymentMethod === "qris" && !isPickup && effectivePaymentStatus !== "paid" ? (
-                          <button
-                            onClick={() => handleConfirmPaymentStatus(int)}
-                            className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-xs"
-                          >
-                            <CheckCircle2 className="w-3 h-3" />
-                            Tandai Lunas
-                          </button>
                         ) : null}
                       </td>
 
                       {/* Pengiriman / Resi */}
                       <td className="py-4 px-4 align-top space-y-1.5">
-                        {int.tracking_number ? (
+                        {effectiveTrackingNumber ? (
                           <div className="space-y-1">
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-800 border border-neutral-200 font-mono">
                               <Truck className="w-3 h-3 text-neutral-600" />
-                              {int.tracking_number}
+                              {String(effectiveTrackingNumber)}
                             </span>
                             <div className="flex items-center gap-2 pt-0.5">
                               <button
-                                onClick={() => handleOpenResiModal(int)}
+                                onClick={() => handleOpenResiModal({ ...int, tracking_number: String(effectiveTrackingNumber) })}
                                 className="text-[10px] text-neutral-500 hover:text-black font-semibold"
                               >
                                 Edit Resi
                               </button>
                               <button
-                                onClick={() => handleSendWaResi(int)}
+                                onClick={() => handleSendWaResi({ ...int, tracking_number: String(effectiveTrackingNumber) })}
                                 className="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-0.5"
                                 title="Kirim Link Tracking via WA"
                               >
@@ -975,13 +1129,30 @@ export default function OrdersPage() {
 
                       {/* Actions */}
                       <td className="py-4 px-4 align-top text-right">
-                        <button
-                          onClick={() => handleSingleDelete(int)}
-                          className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 transition-colors"
-                          title="Hapus Pesanan"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {effectiveFulfillmentStatus === "completed" || effectiveFulfillmentStatus === "selesai" ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Selesai
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleCompleteOrder(int)}
+                              className="inline-flex items-center gap-1 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg shadow-xs transition-all"
+                              title={effectiveProofUrl ? "Selesaikan pesanan & hapus bukti transfer dari storage" : "Selesaikan pesanan"}
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              Selesaikan
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleSingleDelete(int)}
+                            className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 transition-colors"
+                            title="Hapus Pesanan"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1120,15 +1291,22 @@ export default function OrdersPage() {
                       handleConfirmPaymentStatus(viewingProofIntent);
                       setViewingProofIntent(null);
                     }}
-                    className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs"
+                    className="px-4 py-2 bg-neutral-900 text-white hover:bg-black font-bold rounded-xl text-xs flex items-center gap-2 shadow-xs"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     Konfirmasi Lunas
                   </button>
                 )}
                 <button
+                  onClick={() => handleCompleteOrder(viewingProofIntent)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-1.5 shadow-xs"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Selesaikan & Hapus Bukti
+                </button>
+                <button
                   onClick={() => setViewingProofIntent(null)}
-                  className="px-4 py-2 bg-black text-white hover:bg-neutral-800 font-bold rounded-xl text-xs"
+                  className="px-4 py-2 bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-bold rounded-xl text-xs"
                 >
                   Tutup
                 </button>

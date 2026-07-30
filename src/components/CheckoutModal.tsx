@@ -271,12 +271,20 @@ export function CheckoutModal({
           .select()
           .single();
 
-        if (error && (error.code === "PGRST204" || error.message?.includes("payment_method"))) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { payment_method, ...fallbackPayload } = cleanPayload;
+        if (error && (error.code === "PGRST204" || error.message?.includes("schema cache") || error.message?.includes("Could not find"))) {
+          const corePayload = {
+            product_name: cleanPayload.product_name,
+            size_ml: cleanPayload.size_ml,
+            price: cleanPayload.price,
+            customer_name: cleanPayload.customer_name,
+            customer_wa: cleanPayload.customer_wa,
+            customer_address: cleanPayload.customer_address,
+            order_notes: cleanPayload.order_notes,
+            items_json: cleanPayload.items_json,
+          };
           const fallbackRes = await supabase
             .from("order_intents")
-            .insert([fallbackPayload])
+            .insert([corePayload])
             .select()
             .single();
           data = fallbackRes.data;
