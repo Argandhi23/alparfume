@@ -351,6 +351,16 @@ export default function OrdersPage() {
     setIsResiModalOpen(true);
   };
 
+  const handleSendWaResi = (intent: OrderIntent) => {
+    if (!intent.tracking_number || !intent.customer_wa) return;
+    const waNumber = intent.customer_wa.replace(/[^\d+]/g, "");
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://alparfume.com";
+    const trackingUrl = `${origin}/orders/${intent.id}`;
+    const message = `Halo Kak ${intent.customer_name || ""}, pesanan Anda #${intent.order_code || intent.id} di Al Parfume telah dikirim! 🚀\n\nNo. Resi Pengiriman: *${intent.tracking_number}*\n\nAnda dapat mengecek status & tracking live pesanan Anda di link berikut:\n${trackingUrl}\n\nTerima kasih telah berbelanja di Al Parfume! ✨`;
+    const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, "_blank");
+  };
+
   const handleSaveResi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedIntentForResi) return;
@@ -368,7 +378,10 @@ export default function OrdersPage() {
         },
         body: JSON.stringify({
           id: selectedIntentForResi.id,
-          updates: { tracking_number: cleanResi || null },
+          updates: { 
+            tracking_number: cleanResi || null,
+            fulfillment_status: cleanResi ? "shipped" : "pending"
+          },
         }),
       });
 
@@ -376,19 +389,34 @@ export default function OrdersPage() {
         // Client fallback
         await supabase
           .from("order_intents")
-          .update({ tracking_number: cleanResi || null })
+          .update({ 
+            tracking_number: cleanResi || null,
+            fulfillment_status: cleanResi ? "shipped" : "pending"
+          })
           .eq("id", selectedIntentForResi.id);
       }
 
       setIntents((prev) =>
         prev.map((item) =>
           item.id === selectedIntentForResi.id
-            ? { ...item, tracking_number: cleanResi || null }
+            ? { 
+                ...item, 
+                tracking_number: cleanResi || null,
+                fulfillment_status: cleanResi ? "shipped" : "pending"
+              }
             : item
         )
       );
 
       setIsResiModalOpen(false);
+
+      if (cleanResi && selectedIntentForResi.customer_wa) {
+        handleSendWaResi({
+          ...selectedIntentForResi,
+          tracking_number: cleanResi,
+        });
+      }
+
       setSelectedIntentForResi(null);
       setResiInput("");
     } catch (err: unknown) {
@@ -523,10 +551,28 @@ export default function OrdersPage() {
         return int.payment_status === "paid";
       }
       if (statusFilter === "pending") {
-        return int.payment_status !== "paid" && int.payment_method !== "cod_pickup";
+        const isPickupOrder =
+          int.payment_method === "cod_pickup" ||
+          int.courier_name === "Ambil di Toko" ||
+          (int.customer_address && int.customer_address.includes("AMBIL DI TOKO")) ||
+          (int.items_json &&
+            (int.items_json.includes('"payment_method":"cod_pickup"') ||
+              int.items_json.includes('"delivery_method":"pickup"') ||
+              int.items_json.includes('"Ambil di Toko"')));
+
+        return int.payment_status !== "paid" && !isPickupOrder;
       }
       if (statusFilter === "cod") {
-        return int.payment_method === "cod_pickup";
+        const isPickupOrder =
+          int.payment_method === "cod_pickup" ||
+          int.courier_name === "Ambil di Toko" ||
+          (int.customer_address && int.customer_address.includes("AMBIL DI TOKO")) ||
+          (int.items_json &&
+            (int.items_json.includes('"payment_method":"cod_pickup"') ||
+              int.items_json.includes('"delivery_method":"pickup"') ||
+              int.items_json.includes('"Ambil di Toko"')));
+
+        return isPickupOrder;
       }
 
       return true;
@@ -731,6 +777,16 @@ export default function OrdersPage() {
 
                   const effectivePaymentMethod = parsedMeta.paymentMethod || int.payment_method;
                   
+                  const isPickup =
+                    effectivePaymentMethod === "cod_pickup" ||
+                    int.payment_method === "cod_pickup" ||
+                    int.courier_name === "Ambil di Toko" ||
+                    (int.customer_address && int.customer_address.includes("AMBIL DI TOKO")) ||
+                    (itemsJsonString &&
+                      (itemsJsonString.includes('"payment_method":"cod_pickup"') ||
+                        itemsJsonString.includes('"delivery_method":"pickup"') ||
+                        itemsJsonString.includes('"Ambil di Toko"')));
+
                   const localStatus = typeof window !== "undefined" ? localStorage.getItem(`alparfume_intent_status_${int.id}`) : null;
                   
                   let effectivePaymentStatus = "pending_verification";
@@ -792,7 +848,7 @@ export default function OrdersPage() {
                         <div className="font-bold text-neutral-900 text-xs">{int.customer_name || "Pelanggan"}</div>
                         {int.customer_wa && (
                           <a
-                            href={`https://wa.me/${int.customer_wa}`}
+                            href={`https://wa.me/${int.customer_wa.replace(/[^\d+]/g, "")}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
@@ -840,7 +896,7 @@ export default function OrdersPage() {
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             Terverifikasi Lunas
                           </span>
-                        ) : effectivePaymentMethod === "cod_pickup" ? (
+                        ) : isPickup ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                             <Store className="w-3.5 h-3.5 text-blue-600" />
                             Ambil Toko (COD)
@@ -870,7 +926,7 @@ export default function OrdersPage() {
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
-                        ) : effectivePaymentMethod === "qris" && effectivePaymentStatus !== "paid" ? (
+                        ) : effectivePaymentMethod === "qris" && !isPickup && effectivePaymentStatus !== "paid" ? (
                           <button
                             onClick={() => handleConfirmPaymentStatus(int)}
                             className="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 transition-all shadow-xs"
@@ -889,12 +945,22 @@ export default function OrdersPage() {
                               <Truck className="w-3 h-3 text-neutral-600" />
                               {int.tracking_number}
                             </span>
-                            <button
-                              onClick={() => handleOpenResiModal(int)}
-                              className="text-[10px] text-neutral-500 hover:text-black font-semibold block"
-                            >
-                              Edit Resi
-                            </button>
+                            <div className="flex items-center gap-2 pt-0.5">
+                              <button
+                                onClick={() => handleOpenResiModal(int)}
+                                className="text-[10px] text-neutral-500 hover:text-black font-semibold"
+                              >
+                                Edit Resi
+                              </button>
+                              <button
+                                onClick={() => handleSendWaResi(int)}
+                                className="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold flex items-center gap-0.5"
+                                title="Kirim Link Tracking via WA"
+                              >
+                                <MessageCircle className="w-3 h-3" />
+                                Kirim WA
+                              </button>
+                            </div>
                           </div>
                         ) : (
                           <button

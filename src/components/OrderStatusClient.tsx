@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { OrderIntent } from "@/lib/supabase";
-import { CheckCircle2, Clock, Truck, Store, Copy, Upload, Loader2, MapPin, Navigation } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { supabase, OrderIntent } from "@/lib/supabase";
+import { 
+  CheckCircle2, Clock, Truck, Store, Copy, Upload, Loader2, MapPin, 
+  Navigation, PackageCheck, Package, Check, ZoomIn, X, AlertCircle
+} from "lucide-react";
 import Image from "next/image";
 
 interface OrderStatusClientProps {
@@ -12,7 +15,7 @@ interface OrderStatusClientProps {
 
 /**
  * Client-side image compressor using HTML Canvas
- * Resizes max width/height to 600px, quality 0.6 (Max size ~100KB - 200KB)
+ * Resizes max width/height to 800px, quality 0.75 for crisp clear payment proofs
  */
 async function compressImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,8 +25,8 @@ async function compressImage(file: File): Promise<string> {
       const img = new window.Image();
       img.src = event.target?.result as string;
       img.onload = () => {
-        const maxWidth = 600;
-        const maxHeight = 600;
+        const maxWidth = 800;
+        const maxHeight = 800;
         let width = img.width;
         let height = img.height;
 
@@ -47,7 +50,7 @@ async function compressImage(file: File): Promise<string> {
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
         resolve(dataUrl);
       };
       img.onerror = (err) => reject(err);
@@ -63,8 +66,33 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const [proofUrl, setProofUrl] = useState<string | null>(initialOrder?.payment_proof_url || null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [isQrisZoomed, setIsQrisZoomed] = useState(false);
+
+  // Poll database for real-time status & resi updates
+  const fetchOrderFromDb = useCallback(async () => {
+    try {
+      const numericId = parseInt(orderId, 10);
+      if (isNaN(numericId)) return;
+
+      const { data, error } = await supabase
+        .from("order_intents")
+        .select("*")
+        .eq("id", numericId)
+        .single();
+
+      if (!error && data) {
+        setOrder(data as OrderIntent);
+        if (data.payment_proof_url) {
+          setProofUrl(data.payment_proof_url);
+        }
+      }
+    } catch (err) {
+      console.warn("Polling order error:", err);
+    }
+  }, [orderId]);
 
   useEffect(() => {
+    // 1. Try local storage fallback if initialOrder is not available
     if (!initialOrder) {
       try {
         const saved = localStorage.getItem(`alparfume_order_${orderId}`);
@@ -96,7 +124,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         console.error("Local storage load error:", err);
       }
     }
-  }, [orderId, initialOrder]);
+
+    // 2. Initial fetch & setup polling every 7 seconds
+    fetchOrderFromDb();
+    const interval = setInterval(() => {
+      fetchOrderFromDb();
+    }, 7000);
+
+    return () => clearInterval(interval);
+  }, [orderId, initialOrder, fetchOrderFromDb]);
 
   const formatRupiah = (num: number) => {
     return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(num);
@@ -165,13 +201,33 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       (order.items_json.includes('"payment_method":"cod_pickup"') ||
         order.items_json.includes('"delivery_method":"pickup"')));
 
+  // Order Tracking Status Calculation
+  const isPaid = order?.payment_status === "paid";
+  const isShipped = !!order?.tracking_number || order?.fulfillment_status === "shipped" || order?.fulfillment_status === "dikirim";
+  const isCompleted = order?.fulfillment_status === "completed" || order?.fulfillment_status === "selesai";
+  const isPacking = isPaid || order?.fulfillment_status === "packing" || order?.fulfillment_status === "dikemas";
+
+  let currentStep = 1; // 1: Menunggu/Dibuat, 2: Dikemas, 3: Dikirim, 4: Selesai
+  if (isCompleted) {
+    currentStep = 4;
+  } else if (isShipped) {
+    currentStep = 3;
+  } else if (isPacking) {
+    currentStep = 2;
+  }
+
   const getStatusBadge = () => {
-    const isPaid = order?.payment_status === "paid";
-    const isShipped = !!order?.tracking_number || order?.fulfillment_status === "shipped";
+    if (isCompleted) {
+      return (
+        <span className="bg-emerald-600 text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5 shadow-xs">
+          <CheckCircle2 className="w-3.5 h-3.5" /> Pesanan Selesai
+        </span>
+      );
+    }
 
     if (isShipped) {
       return (
-        <span className="bg-white text-black font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest border border-black flex items-center gap-1.5">
+        <span className="bg-black text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5 shadow-xs">
           <Truck className="w-3.5 h-3.5" /> Dalam Pengiriman
         </span>
       );
@@ -187,8 +243,8 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
 
     if (isPaid) {
       return (
-        <span className="bg-white text-black font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest border border-black flex items-center gap-1.5">
-          <CheckCircle2 className="w-3.5 h-3.5" /> Pembayaran Lunas
+        <span className="bg-neutral-900 text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5">
+          <PackageCheck className="w-3.5 h-3.5 text-emerald-400" /> Dikemas (Lunas)
         </span>
       );
     }
@@ -200,6 +256,54 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     );
   };
 
+  const steps = isPickup
+    ? [
+        {
+          title: "Pesanan Dibuat",
+          desc: "Pesanan telah terdaftar",
+          step: 1,
+          icon: Clock,
+        },
+        {
+          title: "Siap Diambil",
+          desc: "Toko Al Parfume Madiun",
+          step: 2,
+          icon: Store,
+        },
+        {
+          title: "Selesai (Diambil)",
+          desc: "Diserahkan di toko",
+          step: 3,
+          icon: CheckCircle2,
+        },
+      ]
+    : [
+        {
+          title: "Menunggu",
+          desc: proofUrl ? "Bukti terunggah" : "Upload bukti QRIS",
+          step: 1,
+          icon: Clock,
+        },
+        {
+          title: "Dikemas",
+          desc: isPaid ? "Diverifikasi Admin" : "Proses kemas",
+          step: 2,
+          icon: Package,
+        },
+        {
+          title: "Dikirim",
+          desc: order?.tracking_number ? `Resi: ${order.tracking_number}` : "Kurir ekspedisi",
+          step: 3,
+          icon: Truck,
+        },
+        {
+          title: "Selesai",
+          desc: "Pesanan diterima",
+          step: 4,
+          icon: CheckCircle2,
+        },
+      ];
+
   return (
     <div className="space-y-8 font-sans max-w-3xl mx-auto">
       {/* Black & White Luxury Header Banner */}
@@ -210,7 +314,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               AL PARFUME &bull; PESANAN #{orderId}
             </span>
             <h1 className="text-xl sm:text-2xl font-bold font-sans mt-1">
-              {isPickup ? "Penjemputan Toko (COD)" : "Rincian Invoice & Resi"}
+              {isPickup ? "Penjemputan Toko (COD)" : "Tracking & Status Pesanan"}
             </h1>
           </div>
           {getStatusBadge()}
@@ -218,6 +322,72 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         <div className="flex items-center justify-between text-xs text-neutral-400">
           <span>Metode: <strong className="text-white uppercase">{order?.payment_method === "cod_pickup" ? "Bayar di Tempat (COD)" : "QRIS Transfer"}</strong></span>
           <span>Total: <strong className="text-white font-mono">{formatRupiah(order?.total_price || 0)}</strong></span>
+        </div>
+      </div>
+
+      {/* LIVE ORDER TRACKING PROGRESS STEPPER (Minimalist Monochrome B&W) */}
+      <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
+        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+          <div>
+            <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400 block">
+              Status Pengiriman Real-Time
+            </span>
+            <h2 className="text-base sm:text-lg font-bold text-neutral-900">
+              {isCompleted
+                ? "Pesanan Anda Telah Selesai"
+                : isShipped
+                ? "Pesanan Sedang Dalam Pengiriman"
+                : isPaid
+                ? "Pesanan Sedang Dikemas"
+                : "Menunggu Verifikasi Pembayaran"}
+            </h2>
+          </div>
+          <span className="text-[10px] text-neutral-400 font-mono flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            Live Update
+          </span>
+        </div>
+
+        {/* Stepper Timeline Bar */}
+        <div className="relative py-2">
+          {/* Track background line */}
+          <div className="absolute top-5 left-6 right-6 h-0.5 bg-neutral-200 -z-0 hidden sm:block" />
+
+          <div className={`grid ${isPickup ? "grid-cols-3" : "grid-cols-4"} gap-2 sm:gap-4 relative z-10`}>
+            {steps.map((s) => {
+              const Icon = s.icon;
+              const isPast = currentStep > s.step;
+              const isCurrent = currentStep === s.step;
+
+              return (
+                <div key={s.step} className="flex flex-col items-center text-center space-y-2">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                      isPast
+                        ? "bg-black text-white shadow-xs"
+                        : isCurrent
+                        ? "bg-black text-white ring-4 ring-neutral-200 font-bold shadow-md"
+                        : "bg-neutral-100 text-neutral-400 border border-neutral-200"
+                    }`}
+                  >
+                    {isPast ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <span
+                      className={`text-xs font-bold block ${
+                        isCurrent ? "text-black" : isPast ? "text-neutral-800" : "text-neutral-400"
+                      }`}
+                    >
+                      {s.title}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 block line-clamp-1 mt-0.5">
+                      {s.desc}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -301,7 +471,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               </div>
             </div>
 
-            {/* Direct Google Maps Action Button */}
+            {/* Direct Google Maps Action Button with Updated Link */}
             <div className="bg-black text-white p-5 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="space-y-0.5 text-center sm:text-left">
                 <span className="text-xs font-bold block uppercase tracking-wider">Navigasi Langsung</span>
@@ -311,7 +481,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               </div>
 
               <a
-                href="https://www.google.com/maps/search/?api=1&query=-7.6398704,111.5431913"
+                href="https://maps.app.goo.gl/MmT7u43YTkRszmSL8"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-white hover:bg-neutral-100 text-black font-semibold px-6 py-3 rounded-full text-xs uppercase tracking-wider shadow-sm transition-all cursor-pointer font-sans shrink-0"
@@ -334,15 +504,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           </div>
         </div>
       ) : order?.payment_method === "qris" && order?.payment_status !== "paid" ? (
-        /* QRIS PAYMENT & UPLOAD PROOF SECTION (Minimalist B&W) */
+        /* QRIS PAYMENT & UPLOAD PROOF SECTION (Crisp HD QRIS Image & Minimalist B&W) */
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
           <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
             <div>
               <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400 block">
-                Pembayaran Digital
+                Pembayaran Digital QRIS
               </span>
               <h2 className="text-lg font-bold text-neutral-900">
-                Kode QRIS All E-Wallet
+                Kode QRIS All E-Wallet & M-Banking
               </h2>
             </div>
             <span className="text-xs font-semibold font-mono bg-black text-white px-3.5 py-1 rounded-full">
@@ -351,23 +521,39 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-            {/* QRIS Code Box */}
+            {/* Crisp HD QRIS Code Box */}
             <div className="bg-neutral-50 p-6 rounded-xl border border-neutral-200 text-center space-y-3">
               <span className="text-[10px] font-bold text-neutral-700 block uppercase tracking-wider">
-                1. Pindai Kode QRIS
+                1. Pindai Kode QRIS Resmi
               </span>
-              <div className="relative mx-auto w-48 h-48 bg-white p-3 border border-neutral-200 rounded-xl shadow-xs flex items-center justify-center">
+              
+              <div 
+                onClick={() => setIsQrisZoomed(true)}
+                className="relative mx-auto w-56 sm:w-64 aspect-[3/4] bg-white p-2 border border-neutral-200 rounded-xl shadow-xs flex items-center justify-center cursor-pointer group hover:border-black transition-all overflow-hidden"
+              >
                 <Image
-                  src="/icon.png"
+                  src="/images/qris.jpg"
                   alt="Kode QRIS Al Parfume"
-                  width={160}
-                  height={160}
-                  className="object-contain"
+                  width={600}
+                  height={800}
+                  quality={100}
+                  unoptimized
+                  className="w-full h-full object-contain rounded-lg"
                 />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white text-xs font-semibold rounded-xl gap-1">
+                  <ZoomIn className="w-5 h-5" />
+                  <span>Klik Perbesar QRIS</span>
+                </div>
               </div>
-              <p className="text-[11px] text-neutral-500 leading-relaxed">
-                Mendukung GoPay, OVO, Dana, ShopeePay, BCA, Mandiri & seluruh M-Banking.
-              </p>
+
+              <div className="space-y-1">
+                <p className="text-[11px] text-neutral-700 font-bold">
+                  NMID: ID1026560637526 (Alparfumeco)
+                </p>
+                <p className="text-[10px] text-neutral-500 leading-relaxed">
+                  Mendukung GoPay, OVO, Dana, ShopeePay, BCA, Mandiri & seluruh M-Banking.
+                </p>
+              </div>
             </div>
 
             {/* Upload Payment Proof Box */}
@@ -443,8 +629,9 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               )}
 
               {uploadError && (
-                <div className="p-3 bg-neutral-100 border border-neutral-300 text-neutral-900 rounded-xl text-xs font-semibold">
-                  {uploadError}
+                <div className="p-3 bg-neutral-100 border border-neutral-300 text-neutral-900 rounded-xl text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+                  <span>{uploadError}</span>
                 </div>
               )}
             </div>
@@ -477,6 +664,49 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           </div>
         </div>
       </div>
+
+      {/* FULLSCREEN QRIS ZOOM MODAL */}
+      {isQrisZoomed && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 font-sans">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 space-y-4 relative shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
+              <div>
+                <h3 className="font-bold text-base text-neutral-900">
+                  Kode QRIS Al Parfume
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  NMID: ID1026560637526 &bull; Scan via E-Wallet / Bank
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsQrisZoomed(false)}
+                className="p-1 text-neutral-400 hover:text-black rounded-full hover:bg-neutral-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="relative w-full aspect-[3/4] max-h-[70vh] bg-white rounded-2xl overflow-hidden border border-neutral-200 flex items-center justify-center p-2">
+              <Image
+                src="/images/qris.jpg"
+                alt="Kode QRIS Pembayaran Al Parfume"
+                width={800}
+                height={1066}
+                quality={100}
+                unoptimized
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            <button
+              onClick={() => setIsQrisZoomed(false)}
+              className="w-full bg-black hover:bg-neutral-800 text-white font-bold py-3 rounded-full text-xs uppercase tracking-wider"
+            >
+              Tutup QRIS
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
