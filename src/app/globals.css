@@ -92,5 +92,52 @@ body {
   filter: invert(0);
 }
 
+/* High Contrast Form Input & Dropdown Styling for Light & Dark Mode */
+input, textarea, select {
+  color: var(--foreground);
+  background-color: var(--background);
+  border-color: var(--border);
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+select option {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+[data-theme="dark"] option {
+  background-color: #161616 !important;
+  color: #fafafa !important;
+}
+
+[data-theme="light"] option {
+  background-color: #ffffff !important;
+  color: #0a0a0a !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+
 
 

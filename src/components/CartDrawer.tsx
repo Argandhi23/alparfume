@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { X, Plus, Minus, Trash2 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { formatRupiah } from "@/lib/whatsapp";
-import { CheckoutModal } from "./CheckoutModal";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -13,12 +13,12 @@ interface CartDrawerProps {
 }
 
 export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
-  const { items, updateQuantity, removeFromCart, totalPrice, clearCart } = useCart();
-  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const router = useRouter();
+  const { items, updateQuantity, removeFromCart, totalPrice } = useCart();
 
-  const handleOrderSuccess = () => {
-    clearCart();
+  const handleCheckoutClick = () => {
     onClose();
+    router.push("/checkout");
   };
 
   const toTitleCase = (str: string) => {
@@ -151,7 +151,7 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
             </div>
 
             <button
-              onClick={() => setIsOrderModalOpen(true)}
+              onClick={handleCheckoutClick}
               className="w-full bg-brandBlack text-brandWhite hover:opacity-90 py-3 text-sm font-medium transition-all duration-200 rounded-full font-sans"
             >
               Checkout Sekarang
@@ -159,16 +159,6 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
           </div>
         )}
       </div>
-
-      {/* Cart Checkout Modal */}
-      {isOrderModalOpen && (
-        <CheckoutModal
-          isOpen={isOrderModalOpen}
-          onClose={() => setIsOrderModalOpen(false)}
-          cartItems={items}
-          onSuccess={handleOrderSuccess}
-        />
-      )}
     </>
   );
 }

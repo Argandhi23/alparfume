@@ -12,6 +12,7 @@ interface ImageCropperModalProps {
   onCropComplete: (croppedBlob: Blob, croppedDataUrl: string) => void;
 }
 
+//s
 export default function ImageCropperModal({
   isOpen,
   imageSrc,

@@ -4,22 +4,37 @@ import { useState } from "react";
 import { ProductWithVariants, ProductVariant } from "@/lib/supabase";
 import { formatRupiah } from "@/lib/whatsapp";
 import { useCart } from "@/context/CartContext";
-import { CheckoutModal } from "./CheckoutModal";
 import { QrCode } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface ProductDetailsClientProps {
   product: ProductWithVariants;
 }
 
 export default function ProductDetailsClient({ product }: ProductDetailsClientProps) {
+  const router = useRouter();
   const sortedVariants = [...(product.product_variants || [])].sort((a, b) => a.size_ml - b.size_ml);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(
     sortedVariants[0] || null
   );
   const [showToast, setShowToast] = useState(false);
-  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
-  
+
   const { addToCart } = useCart();
+
+  const handleDirectCheckout = () => {
+    if (!selectedVariant) return;
+
+    addToCart({
+      id: `${product.slug}-${selectedVariant.size_ml}`,
+      productName: product.name,
+      productSlug: product.slug,
+      imageUrl: firstImageUrl,
+      sizeMl: selectedVariant.size_ml,
+      price: selectedVariant.price,
+    });
+
+    router.push("/checkout");
+  };
 
   const isSoldOut = product.is_sold_out || (product.stock !== undefined && product.stock !== null && product.stock <= 0);
   const isLowStock = !isSoldOut && (product.is_low_stock || (product.stock !== undefined && product.stock !== null && product.stock < 5));
@@ -200,7 +215,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
           )}
 
           <button
-            onClick={() => setIsCheckoutModalOpen(true)}
+            onClick={handleDirectCheckout}
             className="w-full bg-brandBlack hover:bg-neutral-800 text-brandWhite font-bold text-sm py-3.5 transition-all duration-200 flex items-center justify-center gap-3 rounded-full font-sans shadow-md cursor-pointer"
           >
             <QrCode className="w-4 h-4" />
@@ -225,17 +240,6 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-brandBlack text-brandWhite border border-brandBorder px-6 py-3 shadow-xl text-xs uppercase tracking-widest font-semibold z-50 animate-fade-in rounded-full">
           Ditambahkan ke keranjang!
         </div>
-      )}
-
-      {/* Internal QRIS & COD Checkout Modal */}
-      {isCheckoutModalOpen && selectedVariant && (
-        <CheckoutModal
-          isOpen={isCheckoutModalOpen}
-          onClose={() => setIsCheckoutModalOpen(false)}
-          product={product}
-          selectedVariant={selectedVariant}
-          quantity={1}
-        />
       )}
     </div>
   );
