@@ -276,34 +276,47 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     );
 
   // Order Tracking Status Calculation from top-level & items_json fields
-  const effectivePaymentStatus = String(order?.payment_status || itemsMeta.payment_status || itemsMeta.paymentStatus || "").toLowerCase();
+  const rawTopFulfill = String(order?.fulfillment_status || "").toLowerCase();
+  const rawMetaFulfill = String(itemsMeta.fulfillment_status || itemsMeta.fulfillmentStatus || "").toLowerCase();
+  const rawTopPay = String(order?.payment_status || "").toLowerCase();
+  const rawMetaPay = String(itemsMeta.payment_status || itemsMeta.paymentStatus || "").toLowerCase();
   const effectiveTrackingNumber = order?.tracking_number || itemsMeta.tracking_number || itemsMeta.trackingNumber;
-  const effectiveFulfillmentStatus = String(order?.fulfillment_status || itemsMeta.fulfillment_status || itemsMeta.fulfillmentStatus || "").toLowerCase();
 
-  const isPaid = effectivePaymentStatus === "paid";
-  const isShipped = !!effectiveTrackingNumber || effectiveFulfillmentStatus === "shipped" || effectiveFulfillmentStatus === "dikirim";
-  const isCompleted = effectiveFulfillmentStatus === "completed" || effectiveFulfillmentStatus === "selesai";
-  const isReadyForPickup = effectiveFulfillmentStatus === "ready_for_pickup" || effectiveFulfillmentStatus === "siap";
-  const isProcessing = isPaid || effectiveFulfillmentStatus === "processing" || effectiveFulfillmentStatus === "dikemas" || effectiveFulfillmentStatus === "packing";
+  const isPaid = rawTopPay === "paid" || rawMetaPay === "paid";
+  const isShipped = !!effectiveTrackingNumber || rawTopFulfill.includes("shipped") || rawTopFulfill.includes("kirim") || rawMetaFulfill.includes("shipped") || rawMetaFulfill.includes("kirim");
+  const isCompleted = rawTopFulfill.includes("completed") || rawTopFulfill.includes("selesai") || rawMetaFulfill.includes("completed") || rawMetaFulfill.includes("selesai");
+  const isReadyForPickup = rawTopFulfill.includes("ready") || rawTopFulfill.includes("siap") || rawMetaFulfill.includes("ready") || rawMetaFulfill.includes("siap");
+  const isProcessing = isPaid || rawTopFulfill.includes("process") || rawTopFulfill.includes("kemas") || rawMetaFulfill.includes("process") || rawMetaFulfill.includes("kemas");
 
   // Step calculation logic (1..4)
   let currentStep = 1;
   if (isPickup) {
-    if (isCompleted) currentStep = 4;
-    else if (isReadyForPickup || isShipped) currentStep = 3;
-    else if (isProcessing) currentStep = 2;
-    else currentStep = 1;
+    if (isCompleted) {
+      currentStep = 4;
+    } else if (isReadyForPickup || isShipped) {
+      currentStep = 3;
+    } else {
+      currentStep = 2;
+    }
   } else if (isCodCourier) {
-    if (isCompleted) currentStep = 4;
-    else if (isShipped) currentStep = 3;
-    else if (isProcessing) currentStep = 2;
-    else currentStep = 1;
+    if (isCompleted) {
+      currentStep = 4;
+    } else if (isShipped) {
+      currentStep = 3;
+    } else {
+      currentStep = 2;
+    }
   } else {
     // Regular Courier (QRIS)
-    if (isCompleted) currentStep = 4;
-    else if (isShipped) currentStep = 3;
-    else if (isProcessing || isPaid) currentStep = 2;
-    else currentStep = 1;
+    if (isCompleted) {
+      currentStep = 4;
+    } else if (isShipped) {
+      currentStep = 3;
+    } else if (isProcessing || isPaid) {
+      currentStep = 2;
+    } else {
+      currentStep = 1;
+    }
   }
 
   const getStatusBadge = () => {
@@ -384,7 +397,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         },
         {
           title: "Siap Diambil",
-          desc: "Toko AL Parfume Madiun 🏬",
+          desc: "Toko AL Parfume Madiun",
           step: 3,
           icon: Store,
         },
@@ -425,7 +438,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     : [
         {
           title: "Verifikasi Bayar",
-          desc: isPaid ? "Pembayaran Lunas ✅" : proofUrl ? "Bukti QRIS terunggah" : "Upload Bukti QRIS",
+          desc: isPaid ? "Pembayaran Lunas" : proofUrl ? "Bukti QRIS terunggah" : "Upload Bukti QRIS",
           step: 1,
           icon: Clock,
         },
@@ -437,7 +450,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         },
         {
           title: "Dalam Pengiriman",
-          desc: effectiveTrackingNumber ? `Resi: ${effectiveTrackingNumber}` : "Kurir ekspedisi 🚚",
+          desc: effectiveTrackingNumber ? `Resi: ${effectiveTrackingNumber}` : "Kurir ekspedisi",
           step: 3,
           icon: Truck,
         },
@@ -452,13 +465,13 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const getStepperTitle = () => {
     if (isPickup) {
       if (isCompleted) return "Pesanan Telah Diambil di Toko Madiun";
-      if (isReadyForPickup || isShipped) return "Parfum Siap Diambil di Toko AL Parfume Madiun 🏬";
+      if (isReadyForPickup || isShipped) return "Parfum Siap Diambil di Toko AL Parfume Madiun";
       if (isProcessing) return "Parfum Sedang Disiapkan & Diracik Tim Toko";
       return "Pesanan Masuk & Terdaftar di Toko";
     }
     if (isCodCourier) {
       if (isCompleted) return "Pesanan Diterima & Pembayaran COD Selesai";
-      if (isShipped) return "Kurir Sedang Mengantar Paket ke Alamat Anda 🚚";
+      if (isShipped) return "Kurir Sedang Mengantar Paket ke Alamat Anda";
       if (isProcessing) return "Paket Sedang Dikemas Rapi Oleh Tim";
       return "Pesanan COD Terkonfirmasi oleh Admin";
     }
@@ -563,8 +576,8 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
             <span>Informasi Penjemputan Toko AL Parfume Madiun</span>
           </div>
           <p className="text-xs text-emerald-900 leading-relaxed font-sans">
-            📍 <strong>Alamat Toko:</strong> Toko AL Parfume, Madiun, Jawa Timur.<br />
-            ⏰ <strong>Jam Operasional:</strong> Setiap Hari (09.00 - 21.00 WIB)
+            <strong>Alamat Toko:</strong> Toko AL Parfume, Madiun, Jawa Timur.<br />
+            <strong>Jam Operasional:</strong> Setiap Hari (09.00 - 21.00 WIB)
           </p>
           {(isReadyForPickup || isShipped) && (
             <div className="text-xs bg-emerald-600 text-white font-bold p-3 rounded-xl flex items-center gap-2 shadow-xs">
@@ -687,7 +700,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
             </div>
           </div>
         </div>
-      ) : order?.payment_method === "qris" && effectivePaymentStatus !== "paid" ? (
+      ) : order?.payment_method === "qris" && !isPaid ? (
         /* QRIS PAYMENT & UPLOAD PROOF SECTION (Crisp HD QRIS Image & Minimalist B&W) */
         <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
           <div className="flex items-center justify-between border-b border-neutral-100 pb-4">
