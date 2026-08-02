@@ -281,9 +281,9 @@ export function CheckoutClient() {
         deliveryMethod === "pickup" ? "Ambil di Toko (COD Madiun)" : selectedCourier.name;
 
       const finalProductName =
-        checkoutItems.length > 1
-          ? `${checkoutItems[0].productName} + ${checkoutItems.length - 1} lainnya`
-          : checkoutItems[0].productName;
+        checkoutItems.length > 0
+          ? checkoutItems.map((item) => item.productName).join(", ")
+          : "Parfum AL Parfume";
 
       const finalSizeMl = checkoutItems[0].sizeMl;
 

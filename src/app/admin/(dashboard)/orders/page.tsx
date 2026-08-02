@@ -568,6 +568,53 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
     }
   };
 
+  const handleSetReadyForPickup = async (intent: OrderIntent) => {
+    try {
+      const authHeader = await getAuthHeader();
+      let currentMeta: Record<string, unknown> = {};
+      if (intent.items_json) {
+        try {
+          const parsed = typeof intent.items_json === "string" ? JSON.parse(intent.items_json) : intent.items_json;
+          if (typeof parsed === "object" && !Array.isArray(parsed)) {
+            currentMeta = parsed as Record<string, unknown>;
+          }
+        } catch {}
+      }
+      currentMeta.fulfillment_status = "ready_for_pickup";
+      currentMeta.fulfillmentStatus = "ready_for_pickup";
+      const updatedItemsJson = JSON.stringify(currentMeta);
+
+      const res = await fetch("/api/admin/intents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({
+          id: intent.id,
+          updates: {
+            fulfillment_status: "ready_for_pickup",
+            items_json: updatedItemsJson,
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        await supabase
+          .from("order_intents")
+          .update({ fulfillment_status: "ready_for_pickup", items_json: updatedItemsJson })
+          .eq("id", intent.id);
+      }
+
+      setIntents((prev) =>
+        prev.map((item) =>
+          item.id === intent.id
+            ? { ...item, fulfillment_status: "ready_for_pickup", items_json: updatedItemsJson }
+            : item
+        )
+      );
+    } catch (err) {
+      console.error("Gagal mengubah status siap diambil di toko:", err);
+    }
+  };
+
   const handleConfirmPaymentStatus = async (intent: OrderIntent) => {
     if (!confirm(`Konfirmasi pembayaran lunas untuk pesanan ${intent.customer_name || ""}?`)) return;
 
@@ -1043,12 +1090,13 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                       const parsed = JSON.parse(itemsJsonString);
                       if (Array.isArray(parsed)) {
                         items = parsed;
-                      } else if (parsed.cartItems && Array.isArray(parsed.cartItems)) {
-                        items = parsed.cartItems;
-                        parsedMeta = parsed;
-                      } else {
-                        items = [parsed];
-                        parsedMeta = parsed;
+                      } else if (typeof parsed === "object" && parsed !== null) {
+                        parsedMeta = parsed as Record<string, unknown>;
+                        if (Array.isArray(parsed.items) && parsed.items.length > 0) {
+                          items = parsed.items as CartItemMeta[];
+                        } else if (Array.isArray(parsed.cartItems) && parsed.cartItems.length > 0) {
+                          items = parsed.cartItems as CartItemMeta[];
+                        }
                       }
                     } catch {
                       items = [];
@@ -1243,7 +1291,28 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
 
                       {/* Pengiriman / Resi */}
                       <td className="py-4 px-4 align-top space-y-1.5">
-                        {effectiveTrackingNumber ? (
+                        {isPickup ? (
+                          effectiveFulfillmentStatus === "ready_for_pickup" || effectiveFulfillmentStatus === "siap" ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 animate-pulse">
+                              <Store className="w-3.5 h-3.5 text-emerald-600" />
+                              Siap Diambil di Toko
+                            </span>
+                          ) : effectiveFulfillmentStatus === "completed" || effectiveFulfillmentStatus === "selesai" ? (
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-700 border border-neutral-200">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Diserahkan di Toko
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleSetReadyForPickup(int)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all"
+                              title="Tandai parfum siap diambil di toko Madiun"
+                            >
+                              <Store className="w-3.5 h-3.5" />
+                              + Tandai Siap Diambil
+                            </button>
+                          )
+                        ) : effectiveTrackingNumber ? (
                           <div className="space-y-1">
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-800 border border-neutral-200 font-mono">
                               <Truck className="w-3 h-3 text-neutral-600" />
