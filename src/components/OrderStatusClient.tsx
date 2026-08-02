@@ -146,13 +146,38 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       }
     }
 
-    // 2. Initial fetch & setup polling every 5 seconds for fast live updates
+    // 2. Initial fetch & setup polling every 3 seconds for instant live updates
     fetchOrderFromDb();
     const interval = setInterval(() => {
       fetchOrderFromDb();
-    }, 5000);
+    }, 3000);
 
-    return () => clearInterval(interval);
+    // 3. Supabase Realtime Subscription for instant status updates from Admin
+    const numericId = parseInt(orderId, 10);
+    const channel = supabase
+      .channel(`order_live_${orderId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "order_intents",
+        },
+        (payload) => {
+          if (payload.new && (payload.new.id === numericId || payload.new.order_code === orderId)) {
+            setOrder(payload.new as OrderIntent);
+            if (payload.new.payment_proof_url) {
+              setProofUrl(payload.new.payment_proof_url);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [orderId, initialOrder, fetchOrderFromDb]);
 
   const formatRupiah = (num: number) => {
@@ -228,31 +253,57 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     } catch {}
   }
 
+  const addressLower = (order?.customer_address || "").toLowerCase();
+  const paymentMethodLower = (order?.payment_method || "").toLowerCase();
+  const courierNameLower = (order?.courier_name || "").toLowerCase();
+  const itemsJsonStr = (order?.items_json || "").toLowerCase();
+
   const isPickup =
-    order?.payment_method === "cod_pickup" ||
-    order?.courier_name === "Ambil di Toko" ||
-    (order?.customer_address && order.customer_address.includes("AMBIL DI TOKO")) ||
-    (order?.items_json &&
-      (order.items_json.includes('"payment_method":"cod_pickup"') ||
-        order.items_json.includes('"delivery_method":"pickup"')));
+    paymentMethodLower === "cod_pickup" ||
+    courierNameLower.includes("toko") ||
+    courierNameLower.includes("ambil") ||
+    addressLower.includes("ambil di toko") ||
+    addressLower.includes("toko madiun") ||
+    itemsJsonStr.includes('"payment_method":"cod_pickup"') ||
+    itemsJsonStr.includes('"delivery_method":"pickup"');
+
+  const isCodCourier =
+    !isPickup && (
+      paymentMethodLower === "cod" ||
+      paymentMethodLower === "cod_courier" ||
+      itemsJsonStr.includes('"payment_method":"cod"') ||
+      itemsJsonStr.includes('"payment_method":"cod_courier"')
+    );
 
   // Order Tracking Status Calculation from top-level & items_json fields
-  const effectivePaymentStatus = order?.payment_status || itemsMeta.payment_status || itemsMeta.paymentStatus;
+  const effectivePaymentStatus = String(order?.payment_status || itemsMeta.payment_status || itemsMeta.paymentStatus || "").toLowerCase();
   const effectiveTrackingNumber = order?.tracking_number || itemsMeta.tracking_number || itemsMeta.trackingNumber;
-  const effectiveFulfillmentStatus = order?.fulfillment_status || itemsMeta.fulfillment_status || itemsMeta.fulfillmentStatus;
+  const effectiveFulfillmentStatus = String(order?.fulfillment_status || itemsMeta.fulfillment_status || itemsMeta.fulfillmentStatus || "").toLowerCase();
 
   const isPaid = effectivePaymentStatus === "paid";
   const isShipped = !!effectiveTrackingNumber || effectiveFulfillmentStatus === "shipped" || effectiveFulfillmentStatus === "dikirim";
   const isCompleted = effectiveFulfillmentStatus === "completed" || effectiveFulfillmentStatus === "selesai";
-  const isPacking = isPaid || effectiveFulfillmentStatus === "packing" || effectiveFulfillmentStatus === "dikemas";
+  const isReadyForPickup = effectiveFulfillmentStatus === "ready_for_pickup" || effectiveFulfillmentStatus === "siap";
+  const isProcessing = isPaid || effectiveFulfillmentStatus === "processing" || effectiveFulfillmentStatus === "dikemas" || effectiveFulfillmentStatus === "packing";
 
-  let currentStep = 1; // 1: Menunggu/Dibuat, 2: Dikemas, 3: Dikirim, 4: Selesai
-  if (isCompleted) {
-    currentStep = 4;
-  } else if (isShipped) {
-    currentStep = 3;
-  } else if (isPacking) {
-    currentStep = 2;
+  // Step calculation logic (1..4)
+  let currentStep = 1;
+  if (isPickup) {
+    if (isCompleted) currentStep = 4;
+    else if (isReadyForPickup || isShipped) currentStep = 3;
+    else if (isProcessing) currentStep = 2;
+    else currentStep = 1;
+  } else if (isCodCourier) {
+    if (isCompleted) currentStep = 4;
+    else if (isShipped) currentStep = 3;
+    else if (isProcessing) currentStep = 2;
+    else currentStep = 1;
+  } else {
+    // Regular Courier (QRIS)
+    if (isCompleted) currentStep = 4;
+    else if (isShipped) currentStep = 3;
+    else if (isProcessing || isPaid) currentStep = 2;
+    else currentStep = 1;
   }
 
   const getStatusBadge = () => {
@@ -264,18 +315,40 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       );
     }
 
-    if (isShipped) {
+    if (isPickup) {
+      if (isReadyForPickup || isShipped) {
+        return (
+          <span className="bg-emerald-500 text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5 shadow-xs animate-pulse">
+            <Store className="w-3.5 h-3.5" /> Siap Diambil di Toko
+          </span>
+        );
+      }
       return (
-        <span className="bg-black text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5 shadow-xs">
-          <Truck className="w-3.5 h-3.5" /> Dalam Pengiriman
+        <span className="bg-white text-black font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest border border-black flex items-center gap-1.5">
+          <Store className="w-3.5 h-3.5" /> Ambil di Toko (COD)
         </span>
       );
     }
 
-    if (isPickup) {
+    if (isCodCourier) {
+      if (isShipped) {
+        return (
+          <span className="bg-amber-500 text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5 shadow-xs animate-pulse">
+            <Truck className="w-3.5 h-3.5" /> Kurir Mengantar Paket
+          </span>
+        );
+      }
       return (
-        <span className="bg-white text-black font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest border border-black flex items-center gap-1.5">
-          <Store className="w-3.5 h-3.5" /> Ambil di Toko (COD)
+        <span className="bg-amber-100 text-amber-900 font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest border border-amber-300 flex items-center gap-1.5">
+          <Clock className="w-3.5 h-3.5" /> COD (Bayar di Tempat)
+        </span>
+      );
+    }
+
+    if (isShipped) {
+      return (
+        <span className="bg-black text-white font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1.5 shadow-xs">
+          <Truck className="w-3.5 h-3.5" /> Dalam Pengiriman Kurir
         </span>
       );
     }
@@ -298,50 +371,102 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const steps = isPickup
     ? [
         {
-          title: "Pesanan Dibuat",
-          desc: "Pesanan telah terdaftar",
+          title: "Pesanan Masuk",
+          desc: "Terdaftar di sistem toko",
           step: 1,
           icon: Clock,
         },
         {
-          title: "Siap Diambil",
-          desc: "Toko Al Parfume Madiun",
+          title: "Menyiapkan Parfum",
+          desc: "Diracik & dikemas tim toko",
           step: 2,
+          icon: Package,
+        },
+        {
+          title: "Siap Diambil",
+          desc: "Toko AL Parfume Madiun 🏬",
+          step: 3,
           icon: Store,
         },
         {
           title: "Selesai (Diambil)",
           desc: "Diserahkan di toko",
+          step: 4,
+          icon: CheckCircle2,
+        },
+      ]
+    : isCodCourier
+    ? [
+        {
+          title: "Pesanan Masuk (COD)",
+          desc: "Terkonfirmasi oleh Admin",
+          step: 1,
+          icon: Clock,
+        },
+        {
+          title: "Menyiapkan Paket",
+          desc: "Paket dikemas rapi",
+          step: 2,
+          icon: Package,
+        },
+        {
+          title: "Pengiriman Kurir",
+          desc: effectiveTrackingNumber ? `No. Resi: ${effectiveTrackingNumber}` : "Kurir mengantar (Siapkan COD)",
           step: 3,
+          icon: Truck,
+        },
+        {
+          title: "Pesanan Selesai",
+          desc: "Diterima & COD lunas",
+          step: 4,
           icon: CheckCircle2,
         },
       ]
     : [
         {
-          title: "Menunggu",
-          desc: proofUrl ? "Bukti terunggah" : "Upload bukti QRIS",
+          title: "Verifikasi Bayar",
+          desc: isPaid ? "Pembayaran Lunas ✅" : proofUrl ? "Bukti QRIS terunggah" : "Upload Bukti QRIS",
           step: 1,
           icon: Clock,
         },
         {
-          title: "Dikemas",
-          desc: isPaid ? "Diverifikasi Admin" : "Proses kemas",
+          title: "Menyiapkan Paket",
+          desc: "Proses kemas parfum",
           step: 2,
           icon: Package,
         },
         {
-          title: "Dikirim",
-          desc: effectiveTrackingNumber ? `Resi: ${effectiveTrackingNumber}` : "Kurir ekspedisi",
+          title: "Dalam Pengiriman",
+          desc: effectiveTrackingNumber ? `Resi: ${effectiveTrackingNumber}` : "Kurir ekspedisi 🚚",
           step: 3,
           icon: Truck,
         },
         {
-          title: "Selesai",
-          desc: "Pesanan diterima",
+          title: "Selesai Terkirim",
+          desc: "Paket sampai di tujuan",
           step: 4,
           icon: CheckCircle2,
         },
       ];
+
+  const getStepperTitle = () => {
+    if (isPickup) {
+      if (isCompleted) return "Pesanan Telah Diambil di Toko Madiun";
+      if (isReadyForPickup || isShipped) return "Parfum Siap Diambil di Toko AL Parfume Madiun 🏬";
+      if (isProcessing) return "Parfum Sedang Disiapkan & Diracik Tim Toko";
+      return "Pesanan Masuk & Terdaftar di Toko";
+    }
+    if (isCodCourier) {
+      if (isCompleted) return "Pesanan Diterima & Pembayaran COD Selesai";
+      if (isShipped) return "Kurir Sedang Mengantar Paket ke Alamat Anda 🚚";
+      if (isProcessing) return "Paket Sedang Dikemas Rapi Oleh Tim";
+      return "Pesanan COD Terkonfirmasi oleh Admin";
+    }
+    if (isCompleted) return "Pesanan Parfum Telah Selesai Terkirim";
+    if (isShipped) return "Paket Sedang Dalam Pengiriman Kurir Ekspedisi";
+    if (isPaid || isProcessing) return "Pembayaran Lunas! Paket Sedang Dikemas";
+    return "Menunggu Verifikasi Pembayaran QRIS";
+  };
 
   if (!order) {
     return (
@@ -365,76 +490,88 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               AL PARFUME &bull; PESANAN #{orderId}
             </span>
             <h1 className="text-xl sm:text-2xl font-bold font-sans mt-1">
-              {isPickup ? "Penjemputan Toko (COD)" : "Tracking & Status Pesanan"}
+              {isPickup ? "Live Tracking Penjemputan Toko" : isCodCourier ? "Live Tracking Pengiriman COD" : "Live Tracking & Status Pesanan"}
             </h1>
           </div>
           {getStatusBadge()}
         </div>
         <div className="flex items-center justify-between text-xs text-neutral-400">
-          <span>Metode: <strong className="text-white uppercase">{order?.payment_method === "cod_pickup" ? "Bayar di Tempat (COD)" : "QRIS Transfer"}</strong></span>
+          <span>Metode: <strong className="text-white uppercase">{isPickup ? "Ambil di Toko (COD)" : isCodCourier ? "COD Kurir (Bayar di Tempat)" : "QRIS Transfer (Lunas)"}</strong></span>
           <span>Total: <strong className="text-white font-mono">{formatRupiah(order?.total_price || 0)}</strong></span>
         </div>
       </div>
 
-      {/* LIVE ORDER TRACKING PROGRESS STEPPER (Only for Courier Shipping, Hidden for Store Pickup) */}
-      {!isPickup && (
-        <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
-          <div className="border-b border-neutral-100 pb-3">
-            <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400 block">
-              Status Pengiriman Real-Time
-            </span>
-            <h2 className="text-base sm:text-lg font-bold text-neutral-900 mt-0.5">
-              {isCompleted
-                ? "Pesanan Anda Telah Selesai"
-                : isShipped
-                ? "Pesanan Sedang Dalam Pengiriman"
-                : isPaid
-                ? "Pesanan Sedang Dikemas"
-                : "Menunggu Verifikasi Pembayaran"}
-            </h2>
-          </div>
+      {/* LIVE ORDER TRACKING PROGRESS STEPPER (Displayed for ALL Order Types) */}
+      <div className="bg-white border border-neutral-200 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xs">
+        <div className="border-b border-neutral-100 pb-3">
+          <span className="text-[10px] uppercase font-bold tracking-widest text-neutral-400 block">
+            Status Live Real-Time Sync Admin
+          </span>
+          <h2 className="text-base sm:text-lg font-bold text-neutral-900 mt-0.5">
+            {getStepperTitle()}
+          </h2>
+        </div>
 
-          {/* Stepper Timeline Bar */}
-          <div className="relative py-2">
-            {/* Track background line */}
-            <div className="absolute top-5 left-6 right-6 h-0.5 bg-neutral-200 -z-0 hidden sm:block" />
+        {/* Stepper Timeline Bar */}
+        <div className="relative py-2">
+          {/* Track background line */}
+          <div className="absolute top-5 left-6 right-6 h-0.5 bg-neutral-200 -z-0 hidden sm:block" />
 
-            <div className="grid grid-cols-4 gap-2 sm:gap-4 relative z-10">
-              {steps.map((s) => {
-                const Icon = s.icon;
-                const isPast = currentStep > s.step;
-                const isCurrent = currentStep === s.step;
+          <div className="grid grid-cols-4 gap-2 sm:gap-4 relative z-10">
+            {steps.map((s) => {
+              const Icon = s.icon;
+              const isPast = currentStep > s.step;
+              const isCurrent = currentStep === s.step;
 
-                return (
-                  <div key={s.step} className="flex flex-col items-center text-center space-y-2">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
-                        isPast
-                          ? "bg-black text-white shadow-xs"
-                          : isCurrent
-                          ? "bg-black text-white ring-4 ring-neutral-200 font-bold shadow-md"
-                          : "bg-neutral-100 text-neutral-400 border border-neutral-200"
+              return (
+                <div key={s.step} className="flex flex-col items-center text-center space-y-2">
+                  <div
+                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 ${
+                      isPast
+                        ? "bg-black text-white shadow-xs"
+                        : isCurrent
+                        ? "bg-black text-white ring-4 ring-neutral-200 font-bold shadow-md"
+                        : "bg-neutral-100 text-neutral-400 border border-neutral-200"
+                    }`}
+                  >
+                    {isPast ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <span
+                      className={`text-xs font-bold block ${
+                        isCurrent ? "text-black" : isPast ? "text-neutral-800" : "text-neutral-400"
                       }`}
                     >
-                      {isPast ? <Check className="w-5 h-5" /> : <Icon className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <span
-                        className={`text-xs font-bold block ${
-                          isCurrent ? "text-black" : isPast ? "text-neutral-800" : "text-neutral-400"
-                        }`}
-                      >
-                        {s.title}
-                      </span>
-                      <span className="text-[10px] text-neutral-400 block line-clamp-1 mt-0.5">
-                        {s.desc}
-                      </span>
-                    </div>
+                      {s.title}
+                    </span>
+                    <span className="text-[10px] text-neutral-400 block line-clamp-1 mt-0.5">
+                      {s.desc}
+                    </span>
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
           </div>
+        </div>
+      </div>
+
+      {/* Store Pickup Location Information Box */}
+      {isPickup && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 space-y-3 shadow-xs">
+          <div className="flex items-center gap-2 text-emerald-950 font-bold text-sm">
+            <Store className="w-5 h-5 text-emerald-700" />
+            <span>Informasi Penjemputan Toko AL Parfume Madiun</span>
+          </div>
+          <p className="text-xs text-emerald-900 leading-relaxed font-sans">
+            📍 <strong>Alamat Toko:</strong> Toko AL Parfume, Madiun, Jawa Timur.<br />
+            ⏰ <strong>Jam Operasional:</strong> Setiap Hari (09.00 - 21.00 WIB)
+          </p>
+          {(isReadyForPickup || isShipped) && (
+            <div className="text-xs bg-emerald-600 text-white font-bold p-3 rounded-xl flex items-center gap-2 shadow-xs">
+              <CheckCircle2 className="w-4.5 h-4.5 text-white" />
+              <span>Parfum Anda sudah siap! Silakan tunjukkan No. Pesanan #{orderId} saat mengambil di toko.</span>
+            </div>
+          )}
         </div>
       )}
 

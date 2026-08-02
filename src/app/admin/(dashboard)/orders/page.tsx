@@ -395,6 +395,83 @@ export default function OrdersPage() {
     return { label: sizeMl ? `${sizeMl}ml` : "30ml", tagClass: "bg-neutral-100 text-neutral-700 border-neutral-200" };
   };
 
+  const buildCustomerWaConfirmationMessage = (intent: OrderIntent): string => {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://alparfume.com";
+    const trackingUrl = `${origin}/orders/${intent.id}`;
+    const orderCode = intent.order_code || (intent.id ? String(intent.id).substring(0, 8).toUpperCase() : "PESANAN");
+    const customerName = intent.customer_name || "Pelanggan";
+
+    let itemLines: string[] = [];
+    if (intent.items_json) {
+      try {
+        const parsed = typeof intent.items_json === "string" ? JSON.parse(intent.items_json) : intent.items_json;
+        let itemsArray: CartItemMeta[] = [];
+        if (Array.isArray(parsed)) {
+          itemsArray = parsed;
+        } else if (parsed.cartItems && Array.isArray(parsed.cartItems)) {
+          itemsArray = parsed.cartItems;
+        } else if (parsed.items && Array.isArray(parsed.items)) {
+          itemsArray = parsed.items;
+        }
+
+        if (itemsArray.length > 0) {
+          itemLines = itemsArray.map((itm) => {
+            const name = itm.productName || itm.product_name || "Parfum AL Parfume";
+            const info = formatSizeMlLabel(itm.sizeMl || itm.size_ml || intent.size_ml, name);
+            const qty = itm.quantity || 1;
+            return `• *${name}* [${info.label}] x${qty}`;
+          });
+        }
+      } catch {}
+    }
+
+    if (itemLines.length === 0) {
+      const name = intent.product_name || "Parfum AL Parfume";
+      const info = formatSizeMlLabel(intent.size_ml, name);
+      itemLines = [`• *${name}* [${info.label}]`];
+    }
+
+    const itemsFormatted = itemLines.join("\n");
+
+    const addressLower = (intent.customer_address || "").toLowerCase();
+    const isPickupInStore =
+      addressLower.includes("toko") ||
+      addressLower.includes("ambil") ||
+      addressLower.includes("madiun") ||
+      !intent.customer_address;
+
+    const deliveryFormatted = isPickupInStore
+      ? "🏬 *Metode Pengiriman:* Ambil di Toko (AL Parfume Madiun)"
+      : `🚚 *Metode Pengiriman:* Kurir Pengiriman / Kirim Alamat\n📍 *Alamat Tujuan:* ${intent.customer_address}`;
+
+    const paymentStatus = (intent.payment_status || "").toLowerCase();
+    const isPaid = paymentStatus === "paid" || !!intent.payment_proof_url;
+    const paymentFormatted = isPaid
+      ? "💳 *Status Pembayaran:* QRIS / Transfer (*LUNAS* ✅)"
+      : `💵 *Status Pembayaran:* COD / Bayar di Tempat (Total: *${formatRupiah(intent.total_price || intent.price || 0)}*)`;
+
+    const trackingNote = intent.tracking_number
+      ? `\n📦 *No. Resi:* ${intent.tracking_number}`
+      : "";
+
+    return `Halo Kak ${customerName}, terima kasih telah berbelanja di *AL Parfume*! ✨
+
+Berikut detail konfirmasi pesanan Anda:
+🆔 *No. Pesanan:* #${orderCode}
+
+🛍️ *Detail Produk Dipesan:*
+${itemsFormatted}
+
+💰 *Total Pembayaran:* ${formatRupiah(intent.total_price || intent.price || 0)}
+${paymentFormatted}
+${deliveryFormatted}${trackingNote}
+
+🔗 *Status Live & Bukti Pesanan:*
+${trackingUrl}
+
+Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih banyak! 🙏`;
+  };
+
   const handleSendWaResi = (intent: OrderIntent) => {
     if (!intent.tracking_number || !intent.customer_wa) return;
     const waNumber = formatWaForUrl(intent.customer_wa);
@@ -1055,62 +1132,72 @@ export default function OrdersPage() {
                         {int.customer_wa && (
                           <a
                             href={`https://api.whatsapp.com/send?phone=${formatWaForUrl(int.customer_wa)}&text=${encodeURIComponent(
-                              `Halo Kak ${int.customer_name || ""}, mengenai pesanan #${int.order_code || int.id} di Al Parfume...`
+                              buildCustomerWaConfirmationMessage(int)
                             )}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[11px] font-bold transition-colors shadow-xs"
+                            title="Klik untuk kirim pesan konfirmasi pesanan ke WhatsApp"
                           >
-                            <MessageCircle className="w-3 h-3" />
-                            {int.customer_wa}
+                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Chat WA ({int.customer_wa})</span>
                           </a>
                         )}
                         {int.customer_address && (
-                          <p className="text-[10px] text-neutral-500 line-clamp-1 max-w-[200px]" title={int.customer_address}>
+                          <p className="text-[10px] text-neutral-500 line-clamp-2 max-w-[200px]" title={int.customer_address}>
                             📍 {int.customer_address}
                           </p>
                         )}
                       </td>
 
                       {/* Item Dipesan & Total */}
-                      <td className="py-4 px-4 align-top space-y-1.5 min-w-[220px]">
-                        <div className="space-y-1">
+                      <td className="py-4 px-4 align-top space-y-1.5 min-w-[260px]">
+                        <div className="space-y-1.5">
                           {items.length > 0 ? (
                             items.map((itm, idx) => {
-                              const name = itm.productName || itm.product_name || "Parfum";
+                              const name = itm.productName || itm.product_name || "Parfum AL Parfume";
                               const sizeInfo = formatSizeMlLabel(itm.sizeMl || itm.size_ml || int.size_ml, name);
                               return (
-                                <div key={idx} className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-800 bg-neutral-50 p-1.5 rounded-lg border border-neutral-200">
-                                  <span className="font-bold text-neutral-900">{name}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${sizeInfo.tagClass}`}>
-                                    {sizeInfo.label}
-                                  </span>
-                                  <span className="text-neutral-500 font-mono text-[10px]">x{itm.quantity || 1}</span>
+                                <div key={idx} className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-1 shadow-2xs">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="font-extrabold text-neutral-900 text-xs uppercase tracking-tight font-plus-jakarta">{name}</span>
+                                    <span className="text-neutral-700 font-mono font-bold text-xs bg-white px-2 py-0.5 rounded-md border border-neutral-200 shadow-2xs">x{itm.quantity || 1}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${sizeInfo.tagClass}`}>
+                                      {sizeInfo.label}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })
                           ) : (
                             (() => {
-                              const name = int.product_name || "Parfum";
+                              const name = int.product_name || "Parfum AL Parfume";
                               const sizeInfo = formatSizeMlLabel(int.size_ml, name);
                               return (
-                                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-800 bg-neutral-50 p-1.5 rounded-lg border border-neutral-200">
-                                  <span className="font-bold text-neutral-900">{name}</span>
-                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${sizeInfo.tagClass}`}>
-                                    {sizeInfo.label}
-                                  </span>
+                                <div className="p-2.5 rounded-xl bg-neutral-50 border border-neutral-200/90 space-y-1 shadow-2xs">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="font-extrabold text-neutral-900 text-xs uppercase tracking-tight font-plus-jakarta">{name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${sizeInfo.tagClass}`}>
+                                      {sizeInfo.label}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })()
                           )}
                         </div>
                         {int.order_notes && (
-                          <div className="text-[10px] bg-amber-50 border border-amber-200 text-amber-800 p-1.5 rounded-lg">
-                            📝 <strong>Catatan:</strong> {int.order_notes}
+                          <div className="text-[10px] bg-amber-50 border border-amber-200 text-amber-900 p-2 rounded-xl font-medium">
+                            📝 <strong>Catatan Pembeli:</strong> {int.order_notes}
                           </div>
                         )}
-                        <div className="font-extrabold text-sm text-black font-plus-jakarta pt-1">
-                          {formatRupiah(effectiveTotalPrice)}
+                        <div className="font-extrabold text-sm text-black font-plus-jakarta pt-1 flex items-center justify-between">
+                          <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-bold">Total Transaksi:</span>
+                          <span>{formatRupiah(effectiveTotalPrice)}</span>
                         </div>
                       </td>
 
