@@ -584,6 +584,10 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
       currentMeta.fulfillmentStatus = "ready_for_pickup";
       const updatedItemsJson = JSON.stringify(currentMeta);
 
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`alparfume_intent_fulfill_${intent.id}`, "ready_for_pickup");
+      }
+
       const res = await fetch("/api/admin/intents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...authHeader },
@@ -1133,7 +1137,13 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                     effectiveProofUrl = parsedMeta.payment_proof_url;
                   }
 
-                  const effectiveFulfillmentStatus = int.fulfillment_status || (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.fulfillment_status || parsedMeta.fulfillmentStatus || "pending") : "pending");
+                  const localFulfill = typeof window !== "undefined" ? localStorage.getItem(`alparfume_intent_fulfill_${int.id}`) : null;
+                  const effectiveFulfillmentStatus =
+                    localFulfill ||
+                    (int.fulfillment_status && int.fulfillment_status !== "pending" ? int.fulfillment_status : null) ||
+                    (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.fulfillment_status || parsedMeta.fulfillmentStatus) : null) ||
+                    int.fulfillment_status ||
+                    "pending";
                   const effectiveTrackingNumber = int.tracking_number || (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.tracking_number || parsedMeta.trackingNumber || null) : null);
                   if (!effectiveProofUrl && itemsJsonString) {
                     const urlMatch = itemsJsonString.match(/https?:\/\/[^\s"'\\]+/i) || itemsJsonString.match(/data:image\/[a-zA-Z]+;base64,[^\s"'\\]+/i);

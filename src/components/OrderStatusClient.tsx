@@ -288,15 +288,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const isReadyForPickup = rawTopFulfill.includes("ready") || rawTopFulfill.includes("siap") || rawMetaFulfill.includes("ready") || rawMetaFulfill.includes("siap");
   const isProcessing = isPaid || rawTopFulfill.includes("process") || rawTopFulfill.includes("kemas") || rawMetaFulfill.includes("process") || rawMetaFulfill.includes("kemas");
 
-  // Step calculation logic (1..4)
+  // Step calculation logic
   let currentStep = 1;
   if (isPickup) {
     if (isCompleted) {
-      currentStep = 4;
-    } else if (isReadyForPickup || isShipped) {
       currentStep = 3;
-    } else {
+    } else if (isReadyForPickup || isShipped) {
       currentStep = 2;
+    } else {
+      currentStep = 1;
     }
   } else if (isCodCourier) {
     if (isCompleted) {
@@ -390,21 +390,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           icon: Clock,
         },
         {
-          title: "Menyiapkan Parfum",
-          desc: "Diracik & dikemas tim toko",
-          step: 2,
-          icon: Package,
-        },
-        {
           title: "Siap Diambil",
           desc: "Toko AL Parfume Madiun",
-          step: 3,
+          step: 2,
           icon: Store,
         },
         {
           title: "Selesai (Diambil)",
           desc: "Diserahkan di toko",
-          step: 4,
+          step: 3,
           icon: CheckCircle2,
         },
       ]
@@ -530,7 +524,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           {/* Track background line */}
           <div className="absolute top-5 left-6 right-6 h-0.5 bg-neutral-200 -z-0 hidden sm:block" />
 
-          <div className="grid grid-cols-4 gap-2 sm:gap-4 relative z-10">
+          <div className={`grid ${isPickup ? "grid-cols-3" : "grid-cols-4"} gap-2 sm:gap-4 relative z-10`}>
             {steps.map((s) => {
               const Icon = s.icon;
               const isPast = currentStep > s.step;
