@@ -28,16 +28,20 @@ interface KomerceDestination {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { province, city, district, weight = 500 } = body;
+    const { province, city, district, weight } = body || {};
+    const sanitizeStr = (val: unknown) => typeof val === "string" ? val.replace(/[^\w\s,.-]/gi, "").trim().slice(0, 100) : "";
+    const cleanProvince = sanitizeStr(province);
+    const cleanCity = sanitizeStr(city);
+    const cleanDistrict = sanitizeStr(district);
 
-    const parsedWeight = typeof weight === "number" && weight > 0 ? weight : 500;
+    const parsedWeight = typeof weight === "number" && weight > 0 && weight <= 50000 ? weight : 500;
     const weightKg = Math.max(1, Math.ceil(parsedWeight / 1000));
 
     const searchQueries: string[] = [];
-    if (district && city) searchQueries.push(`${district}, ${city}`);
-    if (district) searchQueries.push(district);
-    if (city) searchQueries.push(city);
-    if (province) searchQueries.push(province);
+    if (cleanDistrict && cleanCity) searchQueries.push(`${cleanDistrict}, ${cleanCity}`);
+    if (cleanDistrict) searchQueries.push(cleanDistrict);
+    if (cleanCity) searchQueries.push(cleanCity);
+    if (cleanProvince) searchQueries.push(cleanProvince);
 
     let destinationId: number | null = null;
     let matchedDestinationLabel = "";

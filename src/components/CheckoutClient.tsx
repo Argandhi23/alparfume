@@ -289,6 +289,7 @@ export function CheckoutClient() {
 
       const itemsList = checkoutItems.map((item) => ({
         productName: item.productName,
+        productSlug: item.productSlug,
         sizeMl: item.sizeMl,
         quantity: item.quantity,
         price: item.price,
@@ -319,60 +320,26 @@ export function CheckoutClient() {
 
       let finalOrderId: number | null = null;
 
-      try {
-        const createRes = await fetch("/api/orders/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cleanPayload }),
-        });
+      const createRes = await fetch("/api/orders/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cleanPayload }),
+      });
 
-        if (createRes.ok) {
-          const resJson = await createRes.json();
-          if (resJson.data?.id) {
-            finalOrderId = resJson.data.id;
-          }
-        }
-      } catch (apiErr) {
-        console.warn("API create order notice, falling back to direct client:", apiErr);
+      if (!createRes.ok) {
+        const errJson = await createRes.json().catch(() => ({}));
+        alert(errJson.error || "Gagal memproses pesanan di server. Silakan coba lagi.");
+        setSubmitting(false);
+        return;
       }
 
-      if (!finalOrderId) {
-        let { data, error } = await supabase
-          .from("order_intents")
-          .insert([cleanPayload])
-          .select()
-          .single();
-
-        if (
-          error &&
-          (error.code === "PGRST204" ||
-            error.message?.includes("schema cache") ||
-            error.message?.includes("Could not find"))
-        ) {
-          const corePayload = {
-            product_name: cleanPayload.product_name,
-            size_ml: cleanPayload.size_ml,
-            price: cleanPayload.price,
-            customer_name: cleanPayload.customer_name,
-            customer_wa: cleanPayload.customer_wa,
-            customer_address: cleanPayload.customer_address,
-            order_notes: cleanPayload.order_notes,
-            items_json: cleanPayload.items_json,
-          };
-          const fallbackRes = await supabase
-            .from("order_intents")
-            .insert([corePayload])
-            .select()
-            .single();
-          data = fallbackRes.data;
-          error = fallbackRes.error;
-        }
-
-        if (error) {
-          console.error("Gagal menyimpan pesanan ke Supabase:", error);
-        } else if (data?.id) {
-          finalOrderId = data.id;
-        }
+      const resJson = await createRes.json();
+      if (resJson.data?.id) {
+        finalOrderId = resJson.data.id;
+      } else {
+        alert("Gagal mendapatkan ID pesanan. Silakan coba lagi.");
+        setSubmitting(false);
+        return;
       }
 
       // Decrement product stock

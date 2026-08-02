@@ -15,6 +15,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ukuran file gambar terlalu besar (Maksimal 5MB)" }, { status: 400 });
     }
 
+    // Validate that proofUrl is a valid image data URI or valid image URL to prevent malicious non-image file uploads
+    const isBase64Image = typeof proofUrl === "string" && /^data:image\/(jpeg|png|jpg|webp);base64,/i.test(proofUrl);
+    const isHttpImageUrl = typeof proofUrl === "string" && /^https?:\/\/.+/i.test(proofUrl);
+
+    if (!isBase64Image && !isHttpImageUrl) {
+      return NextResponse.json({ error: "Format file tidak valid. Hanya file gambar (JPG, PNG, WEBP) yang diperbolehkan." }, { status: 400 });
+    }
+
     const numericId = parseInt(orderId.toString(), 10);
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -56,37 +64,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 3. Smart Fallback: Find the most recent order intent created in database
     if (!targetId) {
-      const { data: recentOrders } = await serviceClient
-        .from("order_intents")
-        .select("id")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (recentOrders && recentOrders.length > 0 && recentOrders[0].id) {
-        targetId = recentOrders[0].id;
-      }
-    }
-
-    // 4. Create placeholder order if table is completely empty
-    if (!targetId) {
-      const { data: newOrder } = await serviceClient
-        .from("order_intents")
-        .insert([{
-          product_name: "AL Parfume Order",
-          size_ml: 35,
-          price: 0,
-          customer_name: "Pelanggan",
-          payment_status: "pending_verification",
-          items_json: JSON.stringify({ orderId }),
-        }])
-        .select()
-        .single();
-
-      if (newOrder?.id) {
-        targetId = newOrder.id;
-      }
+      return NextResponse.json({ error: `Pesanan #${orderId} tidak ditemukan. Mohon periksa kembali ID Pesanan Anda.` }, { status: 404 });
     }
 
     // 1. Upload Base64 image to Supabase Storage bucket 'payment-proofs' if bucket exists

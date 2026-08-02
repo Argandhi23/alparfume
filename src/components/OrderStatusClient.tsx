@@ -101,19 +101,6 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         }
       }
 
-      // 3. Fallback: Search for the most recent order intent created in database
-      if (!fetchedData) {
-        const { data: recentOrders } = await supabase
-          .from("order_intents")
-          .select("*")
-          .order("created_at", { ascending: false })
-          .limit(1);
-
-        if (recentOrders && recentOrders.length > 0) {
-          fetchedData = recentOrders[0] as OrderIntent;
-        }
-      }
-
       if (fetchedData) {
         setOrder(fetchedData);
         if (fetchedData.payment_proof_url) {
@@ -355,6 +342,18 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           icon: CheckCircle2,
         },
       ];
+
+  if (!order) {
+    return (
+      <div className="bg-neutral-50 border border-neutral-200 rounded-3xl p-10 text-center space-y-4 max-w-md mx-auto my-12 font-sans">
+        <AlertCircle className="w-12 h-12 mx-auto text-neutral-400 opacity-60" />
+        <h3 className="text-lg font-bold text-neutral-900">Pesanan Tidak Ditemukan</h3>
+        <p className="text-xs text-neutral-500 leading-relaxed">
+          Pesanan dengan nomor <strong>#{orderId}</strong> tidak ditemukan di sistem. Mohon periksa kembali nomor pesanan Anda.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 font-sans max-w-3xl mx-auto">

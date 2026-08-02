@@ -102,12 +102,7 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!currentOrder) {
-      const { data } = await serviceClient
-        .from("order_intents")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (data && data.length > 0) currentOrder = data[0];
+      return NextResponse.json({ error: `Pesanan dengan ID "${id}" tidak ditemukan` }, { status: 404 });
     }
 
     const targetRowId = currentOrder?.id || filterId;

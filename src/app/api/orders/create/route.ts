@@ -1,6 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
+interface ProductVariant {
+  id: number;
+  product_id: string;
+  size_ml: number;
+  price: number;
+}
+
+interface ProductWithVariants {
+  id: string;
+  name: string;
+  slug: string;
+  product_variants?: ProductVariant[];
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -30,17 +44,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Nomor WhatsApp tidak valid" }, { status: 400 });
     }
 
-    // Sanitize string inputs to prevent long payload abuse
-    const sanitizedPayload = {
-      ...cleanPayload,
-      product_name: String(product_name).slice(0, 255).trim(),
-      customer_name: String(customer_name).slice(0, 150).trim(),
-      customer_wa: sanitizedWa,
-      customer_address: customer_address ? String(customer_address).slice(0, 1000).trim() : null,
-      price: Number(cleanPayload.price) || 0,
-      total_price: Number(cleanPayload.price || cleanPayload.total_price) || 0,
-    };
-
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
@@ -48,10 +51,139 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Server configuration missing" }, { status: 500 });
     }
 
-    // Use service role key client to bypass RLS restrictions for public checkout
+    // Use service role client for db operations
     const serviceClient = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
+
+    // 1. Fetch DB products and variants to re-calculate prices securely on server
+    const { data: dbProducts } = await serviceClient
+      .from("products")
+      .select("*, product_variants(*)");
+
+    const productsList: ProductWithVariants[] = Array.isArray(dbProducts) ? dbProducts : [];
+
+    // Parse items metadata
+    let parsedMeta: Record<string, unknown> = {};
+    if (cleanPayload.items_json) {
+      try {
+        let meta = typeof cleanPayload.items_json === "string" 
+          ? JSON.parse(cleanPayload.items_json) 
+          : cleanPayload.items_json;
+        if (typeof meta === "string") meta = JSON.parse(meta);
+        if (typeof meta === "object" && meta !== null && !Array.isArray(meta)) {
+          parsedMeta = meta as Record<string, unknown>;
+        }
+      } catch (err) {
+        console.warn("Failed to parse items_json in create order:", err);
+      }
+    }
+
+    // Extract items list
+    let rawItems: Record<string, unknown>[] = [];
+    if (Array.isArray(parsedMeta.items) && parsedMeta.items.length > 0) {
+      rawItems = parsedMeta.items as Record<string, unknown>[];
+    } else if (Array.isArray(cleanPayload.items) && cleanPayload.items.length > 0) {
+      rawItems = cleanPayload.items as Record<string, unknown>[];
+    } else {
+      // Single product fallback
+      rawItems = [
+        {
+          productName: cleanPayload.product_name,
+          productSlug: cleanPayload.product_slug || "",
+          sizeMl: cleanPayload.size_ml || 35,
+          quantity: 1,
+        },
+      ];
+    }
+
+    // 2. Server-Side Price Calculation per Item
+    let serverSubtotal = 0;
+    const validatedItems = rawItems.map((item) => {
+      const itemSlug = String(item.productSlug || item.slug || "").trim().toLowerCase();
+      const itemName = String(item.productName || item.name || cleanPayload.product_name || "").trim();
+      const itemSize = Number(item.sizeMl || item.size_ml) || 35;
+      const itemQty = Math.max(1, Math.floor(Number(item.quantity || item.qty) || 1));
+
+      let matchedUnitPrice = 0;
+
+      // Find matching product in database
+      const matchedProduct = productsList.find((p) => 
+        (itemSlug && p.slug?.toLowerCase() === itemSlug) || 
+        (p.name && p.name.toLowerCase() === itemName.toLowerCase())
+      );
+
+      if (matchedProduct && matchedProduct.product_variants && matchedProduct.product_variants.length > 0) {
+        const matchedVariant = matchedProduct.product_variants.find(
+          (v) => Number(v.size_ml) === itemSize
+        ) || matchedProduct.product_variants[0];
+
+        if (matchedVariant && typeof matchedVariant.price === "number") {
+          matchedUnitPrice = matchedVariant.price;
+        }
+      }
+
+      // Hardcoded safety fallback if database variant query was empty
+      if (matchedUnitPrice <= 0) {
+        if (itemSize === 18) matchedUnitPrice = 25000;
+        else if (itemSize === 20) matchedUnitPrice = 20000;
+        else if (itemSize === 35) matchedUnitPrice = 45000;
+        else if (itemSize === 50) matchedUnitPrice = 65000;
+        else matchedUnitPrice = 45000;
+      }
+
+      const itemTotal = matchedUnitPrice * itemQty;
+      serverSubtotal += itemTotal;
+
+      return {
+        productName: itemName,
+        productSlug: matchedProduct?.slug || itemSlug,
+        sizeMl: itemSize,
+        quantity: itemQty,
+        price: matchedUnitPrice,
+        totalItemPrice: itemTotal,
+      };
+    });
+
+    // 3. Server-Side Shipping Cost Calculation
+    const deliveryMethod = String(parsedMeta.delivery_method || cleanPayload.delivery_method || "courier");
+    let validatedShippingCost = 0;
+
+    if (deliveryMethod === "courier") {
+      const requestedShippingCost = Number(parsedMeta.shipping_cost || cleanPayload.shipping_cost);
+      if (!isNaN(requestedShippingCost) && requestedShippingCost >= 0) {
+        validatedShippingCost = Math.floor(requestedShippingCost);
+      } else {
+        validatedShippingCost = 14000; // Default standard courier shipping rate
+      }
+    } else {
+      validatedShippingCost = 0; // Store Pickup / COD Madiun is free
+    }
+
+    // 4. Authoritative Server Total Price
+    const serverGrandTotal = serverSubtotal + validatedShippingCost;
+
+    // Update items_json metadata with server-computed values
+    parsedMeta.items = validatedItems;
+    parsedMeta.subtotal = serverSubtotal;
+    parsedMeta.shipping_cost = validatedShippingCost;
+    parsedMeta.grand_total = serverGrandTotal;
+    parsedMeta.delivery_method = deliveryMethod;
+
+    const finalItemsJson = JSON.stringify(parsedMeta);
+
+    // Sanitize payload with server-calculated price
+    const sanitizedPayload = {
+      ...cleanPayload,
+      product_name: String(product_name).slice(0, 255).trim(),
+      customer_name: String(customer_name).slice(0, 150).trim(),
+      customer_wa: sanitizedWa,
+      customer_address: customer_address ? String(customer_address).slice(0, 1000).trim() : null,
+      price: serverGrandTotal,
+      total_price: serverGrandTotal,
+      shipping_cost: validatedShippingCost,
+      items_json: finalItemsJson,
+    };
 
     let { data, error } = await serviceClient
       .from("order_intents")
@@ -65,13 +197,13 @@ export async function POST(request: NextRequest) {
       
       const corePayload = {
         product_name: String(product_name).slice(0, 255).trim(),
-        size_ml: Number(cleanPayload.size_ml) || 0,
-        price: Number(cleanPayload.price || cleanPayload.total_price) || 0,
+        size_ml: Number(cleanPayload.size_ml) || 35,
+        price: serverGrandTotal,
         customer_name: String(customer_name).slice(0, 150).trim(),
         customer_wa: sanitizedWa,
         customer_address: customer_address ? String(customer_address).slice(0, 1000).trim() : null,
         order_notes: cleanPayload.order_notes ? String(cleanPayload.order_notes).slice(0, 500).trim() : null,
-        items_json: typeof cleanPayload.items_json === "string" ? cleanPayload.items_json : JSON.stringify(cleanPayload.items_json || {}),
+        items_json: finalItemsJson,
       };
 
       const fallbackResult = await serviceClient
@@ -96,3 +228,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
