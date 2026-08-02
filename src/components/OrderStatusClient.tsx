@@ -275,7 +275,11 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       itemsJsonStr.includes('"payment_method":"cod_courier"')
     );
 
-  // Order Tracking Status Calculation from top-level & items_json fields
+  // Order Tracking Status Calculation from top-level & items_json fields & local cache
+  const localFulfill = typeof window !== "undefined"
+    ? (localStorage.getItem(`alparfume_intent_fulfill_${orderId}`) || (order?.id ? localStorage.getItem(`alparfume_intent_fulfill_${order.id}`) : "") || "").toLowerCase()
+    : "";
+
   const rawTopFulfill = String(order?.fulfillment_status || "").toLowerCase();
   const rawMetaFulfill = String(itemsMeta.fulfillment_status || itemsMeta.fulfillmentStatus || "").toLowerCase();
   const rawTopPay = String(order?.payment_status || "").toLowerCase();
@@ -283,9 +287,9 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const effectiveTrackingNumber = order?.tracking_number || itemsMeta.tracking_number || itemsMeta.trackingNumber;
 
   const isPaid = rawTopPay === "paid" || rawMetaPay === "paid";
-  const isShipped = !!effectiveTrackingNumber || rawTopFulfill.includes("shipped") || rawTopFulfill.includes("kirim") || rawMetaFulfill.includes("shipped") || rawMetaFulfill.includes("kirim");
-  const isCompleted = rawTopFulfill.includes("completed") || rawTopFulfill.includes("selesai") || rawMetaFulfill.includes("completed") || rawMetaFulfill.includes("selesai");
-  const isReadyForPickup = rawTopFulfill.includes("ready") || rawTopFulfill.includes("siap") || rawMetaFulfill.includes("ready") || rawMetaFulfill.includes("siap");
+  const isShipped = !!effectiveTrackingNumber || localFulfill.includes("shipped") || rawTopFulfill.includes("shipped") || rawTopFulfill.includes("kirim") || rawMetaFulfill.includes("shipped") || rawMetaFulfill.includes("kirim");
+  const isCompleted = localFulfill.includes("completed") || localFulfill.includes("selesai") || rawTopFulfill.includes("completed") || rawTopFulfill.includes("selesai") || rawMetaFulfill.includes("completed") || rawMetaFulfill.includes("selesai") || itemsJsonStr.includes("completed") || itemsJsonStr.includes("selesai");
+  const isReadyForPickup = localFulfill.includes("ready") || localFulfill.includes("siap") || rawTopFulfill.includes("ready") || rawTopFulfill.includes("siap") || rawMetaFulfill.includes("ready") || rawMetaFulfill.includes("siap") || itemsJsonStr.includes("ready_for_pickup");
   const isProcessing = isPaid || rawTopFulfill.includes("process") || rawTopFulfill.includes("kemas") || rawMetaFulfill.includes("process") || rawMetaFulfill.includes("kemas");
 
   // Step calculation logic

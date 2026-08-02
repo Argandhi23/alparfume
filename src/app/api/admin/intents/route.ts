@@ -143,25 +143,25 @@ export async function PATCH(request: NextRequest) {
 
     const finalItemsJson = JSON.stringify(mergedMeta);
 
-    // 3. Always update items_json
-    await serviceClient
+    // 3. Update both items_json AND top-level columns atomically in Postgres
+    const fullDbUpdate: Record<string, unknown> = {
+      items_json: finalItemsJson,
+    };
+    if (updatePayload.payment_status !== undefined) fullDbUpdate.payment_status = updatePayload.payment_status;
+    if (updatePayload.tracking_number !== undefined) fullDbUpdate.tracking_number = updatePayload.tracking_number;
+    if (updatePayload.fulfillment_status !== undefined) fullDbUpdate.fulfillment_status = updatePayload.fulfillment_status;
+
+    const { error: updateErr } = await serviceClient
       .from("order_intents")
-      .update({ items_json: finalItemsJson })
+      .update(fullDbUpdate)
       .eq("id", targetRowId);
 
-    // 4. Try updating top-level columns safely if schema has them
-    const colUpdates: Record<string, unknown> = {};
-    if (updatePayload.payment_status !== undefined) colUpdates.payment_status = updatePayload.payment_status;
-    if (updatePayload.tracking_number !== undefined) colUpdates.tracking_number = updatePayload.tracking_number;
-    if (updatePayload.fulfillment_status !== undefined) colUpdates.fulfillment_status = updatePayload.fulfillment_status;
-
-    if (Object.keys(colUpdates).length > 0) {
-      try {
-        await serviceClient
-          .from("order_intents")
-          .update(colUpdates)
-          .eq("id", targetRowId);
-      } catch {}
+    if (updateErr) {
+      console.warn("Retrying items_json update fallback:", updateErr.message);
+      await serviceClient
+        .from("order_intents")
+        .update({ items_json: finalItemsJson })
+        .eq("id", targetRowId);
     }
 
     return NextResponse.json({ success: true, targetId: targetRowId });
