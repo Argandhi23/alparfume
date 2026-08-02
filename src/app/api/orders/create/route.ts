@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         {
           productName: cleanPayload.product_name,
           productSlug: cleanPayload.product_slug || "",
-          sizeMl: cleanPayload.size_ml || 35,
+          sizeMl: cleanPayload.size_ml || (String(cleanPayload.product_name || "").toLowerCase().includes("sample") ? 10 : 30),
           quantity: 1,
         },
       ];
@@ -108,7 +108,10 @@ export async function POST(request: NextRequest) {
     const validatedItems = rawItems.map((item) => {
       const itemSlug = String(item.productSlug || item.slug || "").trim().toLowerCase();
       const itemName = String(item.productName || item.name || cleanPayload.product_name || "").trim();
-      const itemSize = Number(item.sizeMl || item.size_ml) || 35;
+      const isSampleProduct = itemName.toLowerCase().includes("sample") || itemSlug.includes("sample");
+      const defaultSize = isSampleProduct ? 10 : 30;
+      const rawSize = Number(item.sizeMl || item.size_ml);
+      const itemSize = (isSampleProduct || (rawSize > 0 && rawSize <= 15)) ? 10 : (rawSize || defaultSize);
       const itemQty = Math.max(1, Math.floor(Number(item.quantity || item.qty) || 1));
 
       let matchedUnitPrice = 0;
@@ -131,10 +134,10 @@ export async function POST(request: NextRequest) {
 
       // Hardcoded safety fallback if database variant query was empty
       if (matchedUnitPrice <= 0) {
-        if (itemSize === 18) matchedUnitPrice = 25000;
-        else if (itemSize === 20) matchedUnitPrice = 20000;
-        else if (itemSize === 35) matchedUnitPrice = 45000;
-        else if (itemSize === 50) matchedUnitPrice = 65000;
+        if (isSampleProduct || itemSize <= 15) matchedUnitPrice = 25000;
+        else if (itemSize === 30 || itemSize === 35) matchedUnitPrice = 45000;
+        else if (itemSize === 50) matchedUnitPrice = 75000;
+        else if (itemSize === 100) matchedUnitPrice = 135000;
         else matchedUnitPrice = 45000;
       }
 

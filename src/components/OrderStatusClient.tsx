@@ -698,7 +698,15 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               Detail Produk
             </span>
             <div className="font-bold text-sm text-neutral-900">{order?.product_name || "Produk AL Parfume"}</div>
-            <div className="text-neutral-600">Ukuran: {order?.size_ml || 30} ml</div>
+            <div className="text-neutral-600">
+              Ukuran: {
+                (order?.product_name || "").toLowerCase().includes("sample") || (order?.size_ml !== undefined && order.size_ml > 0 && order.size_ml <= 15)
+                  ? "Sample (10ml)"
+                  : order?.size_ml
+                  ? `${order.size_ml} ml`
+                  : "30 ml"
+              }
+            </div>
             <div className="text-neutral-600">Total Pembayaran: <strong className="text-black font-mono">{formatRupiah(order?.total_price || 0)}</strong></div>
           </div>
 

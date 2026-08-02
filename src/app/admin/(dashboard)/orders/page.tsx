@@ -248,14 +248,22 @@ export default function OrdersPage() {
             }
             if (itemsArray.length > 0) {
               productDetails = itemsArray
-                .map((item) => `- ${item.productName || item.product_name || "Produk"} ${item.sizeMl || item.size_ml || 50}ml (Qty: ${item.quantity || 1})`)
+                .map((item) => {
+                  const name = item.productName || item.product_name || "Produk";
+                  const info = formatSizeMlLabel(item.sizeMl || item.size_ml || order.size_ml, name);
+                  return `- ${name} [${info.label}] (Qty: ${item.quantity || 1})`;
+                })
                 .join("<br>");
             }
           } catch {
-            productDetails = `${order.product_name || "Produk"} (${order.size_ml || "-"}ml)`;
+            const name = order.product_name || "Produk";
+            const info = formatSizeMlLabel(order.size_ml, name);
+            productDetails = `${name} [${info.label}]`;
           }
         } else {
-          productDetails = `${order.product_name || "Produk"} (${order.size_ml || "-"}ml)`;
+          const name = order.product_name || "Produk";
+          const info = formatSizeMlLabel(order.size_ml, name);
+          productDetails = `${name} [${info.label}]`;
         }
 
         rowsHtml += `
@@ -351,13 +359,49 @@ export default function OrdersPage() {
     setIsResiModalOpen(true);
   };
 
+  const formatWaForUrl = (phone?: string | null): string => {
+    if (!phone) return "";
+    let cleaned = phone.replace(/[^\d]/g, "");
+    if (cleaned.startsWith("0")) {
+      cleaned = "62" + cleaned.slice(1);
+    }
+    return cleaned;
+  };
+
+  const formatSizeMlLabel = (sizeMl?: number, productName?: string): { label: string; tagClass: string } => {
+    const nameLower = (productName || "").toLowerCase();
+    const isSample = nameLower.includes("sample") || (sizeMl !== undefined && sizeMl > 0 && sizeMl <= 15);
+    
+    if (isSample) {
+      if (nameLower.includes("all variant") || nameLower.includes("semua varian")) {
+        return { label: "Sample All Variant (10ml)", tagClass: "bg-purple-100 text-purple-800 border-purple-200" };
+      }
+      if (nameLower.includes("3 variant") || nameLower.includes("3 varian")) {
+        return { label: "Sample 3 Variant (10ml)", tagClass: "bg-purple-100 text-purple-800 border-purple-200" };
+      }
+      return { label: "Sample (10ml)", tagClass: "bg-purple-100 text-purple-800 border-purple-200" };
+    }
+
+    if (sizeMl === 30 || sizeMl === 35) {
+      return { label: "30ml", tagClass: "bg-blue-50 text-blue-700 border-blue-200" };
+    }
+    if (sizeMl === 50) {
+      return { label: "50ml", tagClass: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+    }
+    if (sizeMl === 100) {
+      return { label: "100ml", tagClass: "bg-amber-50 text-amber-800 border-amber-200" };
+    }
+
+    return { label: sizeMl ? `${sizeMl}ml` : "30ml", tagClass: "bg-neutral-100 text-neutral-700 border-neutral-200" };
+  };
+
   const handleSendWaResi = (intent: OrderIntent) => {
     if (!intent.tracking_number || !intent.customer_wa) return;
-    const waNumber = intent.customer_wa.replace(/[^\d+]/g, "");
+    const waNumber = formatWaForUrl(intent.customer_wa);
     const origin = typeof window !== "undefined" ? window.location.origin : "https://alparfume.com";
     const trackingUrl = `${origin}/orders/${intent.id}`;
     const message = `Halo Kak ${intent.customer_name || ""}, pesanan Anda #${intent.order_code || intent.id} di Al Parfume telah dikirim! 🚀\n\nNo. Resi Pengiriman: *${intent.tracking_number}*\n\nAnda dapat mengecek status & tracking live pesanan Anda di link berikut:\n${trackingUrl}\n\nTerima kasih telah berbelanja di Al Parfume! ✨`;
-    const waUrl = `https://wa.me/${waNumber}?text=${encodeURIComponent(message)}`;
+    const waUrl = `https://api.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
     window.open(waUrl, "_blank");
   };
 
@@ -1010,7 +1054,9 @@ export default function OrdersPage() {
                         <div className="font-bold text-neutral-900 text-xs">{int.customer_name || "Pelanggan"}</div>
                         {int.customer_wa && (
                           <a
-                            href={`https://wa.me/${int.customer_wa.replace(/[^\d+]/g, "")}`}
+                            href={`https://api.whatsapp.com/send?phone=${formatWaForUrl(int.customer_wa)}&text=${encodeURIComponent(
+                              `Halo Kak ${int.customer_name || ""}, mengenai pesanan #${int.order_code || int.id} di Al Parfume...`
+                            )}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
@@ -1027,25 +1073,42 @@ export default function OrdersPage() {
                       </td>
 
                       {/* Item Dipesan & Total */}
-                      <td className="py-4 px-4 align-top space-y-1">
-                        <div className="space-y-0.5">
+                      <td className="py-4 px-4 align-top space-y-1.5 min-w-[220px]">
+                        <div className="space-y-1">
                           {items.length > 0 ? (
-                            items.slice(0, 2).map((itm, idx) => (
-                              <div key={idx} className="text-[11px] text-neutral-800 font-medium">
-                                • {itm.productName || itm.product_name || "Parfum"} {itm.sizeMl || itm.size_ml || 50}ml (x{itm.quantity || 1})
-                              </div>
-                            ))
+                            items.map((itm, idx) => {
+                              const name = itm.productName || itm.product_name || "Parfum";
+                              const sizeInfo = formatSizeMlLabel(itm.sizeMl || itm.size_ml || int.size_ml, name);
+                              return (
+                                <div key={idx} className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-800 bg-neutral-50 p-1.5 rounded-lg border border-neutral-200">
+                                  <span className="font-bold text-neutral-900">{name}</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${sizeInfo.tagClass}`}>
+                                    {sizeInfo.label}
+                                  </span>
+                                  <span className="text-neutral-500 font-mono text-[10px]">x{itm.quantity || 1}</span>
+                                </div>
+                              );
+                            })
                           ) : (
-                            <div className="text-[11px] text-neutral-800 font-medium">
-                              • {int.product_name || "Parfum"} ({int.size_ml || 50}ml)
-                            </div>
-                          )}
-                          {items.length > 2 && (
-                            <span className="text-[10px] text-neutral-400 italic block">
-                              +{items.length - 2} item lainnya
-                            </span>
+                            (() => {
+                              const name = int.product_name || "Parfum";
+                              const sizeInfo = formatSizeMlLabel(int.size_ml, name);
+                              return (
+                                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-neutral-800 bg-neutral-50 p-1.5 rounded-lg border border-neutral-200">
+                                  <span className="font-bold text-neutral-900">{name}</span>
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${sizeInfo.tagClass}`}>
+                                    {sizeInfo.label}
+                                  </span>
+                                </div>
+                              );
+                            })()
                           )}
                         </div>
+                        {int.order_notes && (
+                          <div className="text-[10px] bg-amber-50 border border-amber-200 text-amber-800 p-1.5 rounded-lg">
+                            📝 <strong>Catatan:</strong> {int.order_notes}
+                          </div>
+                        )}
                         <div className="font-extrabold text-sm text-black font-plus-jakarta pt-1">
                           {formatRupiah(effectiveTotalPrice)}
                         </div>

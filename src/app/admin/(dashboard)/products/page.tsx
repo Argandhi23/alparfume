@@ -460,7 +460,7 @@ export default function ProductsPage() {
         if (newProd) {
           const variantPayload = {
             product_id: newProd.id,
-            size_ml: 50,
+            size_ml: 35,
             price: Number(formPrice) || 45000,
           };
           const { error: varErr } = await supabase.from("product_variants").insert([variantPayload]);
@@ -526,7 +526,7 @@ export default function ProductsPage() {
         } else {
           await supabase.from("product_variants").insert([{
             product_id: selectedProductId,
-            size_ml: 50,
+            size_ml: 35,
             price: Number(formPrice) || 45000,
           }]);
         }
