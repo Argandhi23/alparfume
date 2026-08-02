@@ -1,8 +1,14 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit(request, 10, 60 * 1000);
+    if (!rateLimit.success) {
+      return rateLimit.response!;
+    }
+
     const body = await request.json();
     const { orderId, proofUrl } = body;
 

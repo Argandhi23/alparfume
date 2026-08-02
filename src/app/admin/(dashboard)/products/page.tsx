@@ -407,6 +407,9 @@ export default function ProductsPage() {
       const activeImages = formImages.filter(Boolean);
       const imageUrlJson = activeImages.length > 0 ? JSON.stringify(activeImages) : "";
 
+      const stockVal = typeof formStock === "number" && !isNaN(formStock) ? formStock : Number(formStock) || 0;
+      const isSoldOutVal = stockVal <= 0 ? true : formIsSoldOut;
+
       const productPayload = {
         name: formName.trim(),
         slug: formSlug.trim(),
@@ -416,19 +419,41 @@ export default function ProductsPage() {
         middle_notes: formMiddleNotes.trim() || null,
         bottom_notes: formBottomNotes.trim() || null,
         is_active: formIsActive,
-        is_sold_out: formIsSoldOut,
+        is_sold_out: isSoldOutVal,
         is_best_seller: formIsBestSeller,
-        stock: Number(formStock) || 0,
+        stock: stockVal,
         shopee_link: null,
         image_url: imageUrlJson,
       };
 
       if (modalType === "add") {
-        const { data: newProd, error: prodErr } = await supabase
+        let { data: newProd, error: prodErr } = await supabase
           .from("products")
           .insert([productPayload])
           .select()
           .single();
+
+        if (prodErr) {
+          console.warn("Product add with full payload failed, trying core payload:", prodErr);
+          const corePayload = {
+            name: formName.trim(),
+            slug: formSlug.trim(),
+            description: formDescription.trim(),
+            category_id: formCategoryId || null,
+            is_active: formIsActive,
+            is_sold_out: isSoldOutVal,
+            is_best_seller: formIsBestSeller,
+            stock: stockVal,
+            image_url: imageUrlJson,
+          };
+          const fallbackRes = await supabase
+            .from("products")
+            .insert([corePayload])
+            .select()
+            .single();
+          newProd = fallbackRes.data;
+          prodErr = fallbackRes.error;
+        }
 
         if (prodErr) throw prodErr;
 
@@ -442,10 +467,49 @@ export default function ProductsPage() {
           if (varErr) console.warn("Variant add notice:", varErr);
         }
       } else if (modalType === "edit" && selectedProductId) {
-        const { error: prodErr } = await supabase
+        let { error: prodErr } = await supabase
           .from("products")
           .update(productPayload)
           .eq("id", selectedProductId);
+
+        if (prodErr) {
+          console.warn("Product update with full payload failed, trying core payload:", prodErr);
+          const corePayload = {
+            name: formName.trim(),
+            slug: formSlug.trim(),
+            description: formDescription.trim(),
+            category_id: formCategoryId || null,
+            top_notes: formTopNotes.trim() || null,
+            middle_notes: formMiddleNotes.trim() || null,
+            bottom_notes: formBottomNotes.trim() || null,
+            is_active: formIsActive,
+            is_sold_out: isSoldOutVal,
+            is_best_seller: formIsBestSeller,
+            stock: stockVal,
+            image_url: imageUrlJson,
+          };
+          const fallbackRes = await supabase
+            .from("products")
+            .update(corePayload)
+            .eq("id", selectedProductId);
+          prodErr = fallbackRes.error;
+        }
+
+        if (prodErr) {
+          console.warn("Product update with core payload failed, trying minimal payload:", prodErr);
+          const minimalPayload = {
+            name: formName.trim(),
+            stock: stockVal,
+            is_active: formIsActive,
+            is_sold_out: isSoldOutVal,
+            image_url: imageUrlJson,
+          };
+          const minimalRes = await supabase
+            .from("products")
+            .update(minimalPayload)
+            .eq("id", selectedProductId);
+          prodErr = minimalRes.error;
+        }
 
         if (prodErr) throw prodErr;
 
@@ -809,8 +873,9 @@ export default function ProductsPage() {
                   <input
                     type="number"
                     required
+                    min={0}
                     value={formStock}
-                    onChange={(e) => setFormStock(Number(e.target.value))}
+                    onChange={(e) => setFormStock(e.target.value === "" ? 0 : Number(e.target.value))}
                     className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
                   />
                 </div>

@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 interface ProductVariant {
   id: number;
@@ -17,6 +18,11 @@ interface ProductWithVariants {
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit(request, 15, 60 * 1000);
+    if (!rateLimit.success) {
+      return rateLimit.response!;
+    }
+
     const body = await request.json();
     const { cleanPayload } = body;
 
