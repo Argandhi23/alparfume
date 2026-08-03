@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ukuran file gambar terlalu besar (Maksimal 5MB)" }, { status: 400 });
     }
 
-    // Validate that proofUrl is a valid image data URI or valid image URL to prevent malicious non-image file uploads
+    // Validate image format
     const isBase64Image = typeof proofUrl === "string" && /^data:image\/(jpeg|png|jpg|webp);base64,/i.test(proofUrl);
     const isHttpImageUrl = typeof proofUrl === "string" && /^https?:\/\/.+/i.test(proofUrl);
 
@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Format file tidak valid. Hanya file gambar (JPG, PNG, WEBP) yang diperbolehkan." }, { status: 400 });
     }
 
-    const numericId = parseInt(orderId.toString(), 10);
+    const queryCode = orderId.toString().trim();
+    const numericId = parseInt(queryCode, 10);
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
@@ -41,145 +43,143 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    let targetId: number | null = null;
-
-    // 1. Check direct numeric ID match if within integer range
-    if (!isNaN(numericId) && numericId > 0 && numericId <= 2147483647) {
-      const { data: existingRow } = await serviceClient
-        .from("order_intents")
-        .select("id")
-        .eq("id", numericId)
-        .maybeSingle();
-
-      if (existingRow?.id) {
-        targetId = existingRow.id;
-      }
+    // 1. Check if target exists in new 'orders' table
+    let orderSearchQuery = serviceClient.from("orders").select("id, order_code");
+    if (!isNaN(numericId) && numericId > 0 && String(numericId) === queryCode) {
+      orderSearchQuery = orderSearchQuery.or(`id.eq.${numericId},order_code.eq.${queryCode}`);
+    } else {
+      orderSearchQuery = orderSearchQuery.or(`order_code.eq.${queryCode},order_code.ilike.%${queryCode}%`);
     }
 
-    // 2. Search by order_code or items_json match if orderId was string/timestamp
-    if (!targetId && orderId) {
-      const { data: matchedRows } = await serviceClient
-        .from("order_intents")
-        .select("id")
-        .or(`order_code.eq.${orderId},items_json.ilike.%${orderId}%`)
-        .order("created_at", { ascending: false })
-        .limit(1);
+    const { data: foundOrders } = await orderSearchQuery.limit(1);
 
-      if (matchedRows && matchedRows.length > 0 && matchedRows[0].id) {
-        targetId = matchedRows[0].id;
-      }
-    }
+    if (foundOrders && foundOrders.length > 0) {
+      const targetOrder = foundOrders[0];
 
-    if (!targetId) {
-      return NextResponse.json({ error: `Pesanan #${orderId} tidak ditemukan. Mohon periksa kembali ID Pesanan Anda.` }, { status: 404 });
-    }
+      // Upload image to Supabase Storage if base64
+      let storagePublicUrl: string | null = null;
+      try {
+        if (typeof proofUrl === "string" && proofUrl.startsWith("data:image")) {
+          const base64Data = proofUrl.split(",")[1];
+          if (base64Data) {
+            const buffer = Buffer.from(base64Data, "base64");
+            const fileName = `proof_${targetOrder.id}_${Date.now()}.jpg`;
 
-    // 1. Upload Base64 image to Supabase Storage bucket 'payment-proofs' if bucket exists
-    let storagePublicUrl: string | null = null;
-    try {
-      if (typeof proofUrl === "string" && proofUrl.startsWith("data:image")) {
-        const base64Data = proofUrl.split(",")[1];
-        if (base64Data) {
-          const buffer = Buffer.from(base64Data, "base64");
-          const fileName = `proof_${targetId}_${Date.now()}.jpg`;
-
-          const { data: uploadData, error: uploadErr } = await serviceClient.storage
-            .from("payment-proofs")
-            .upload(fileName, buffer, {
-              contentType: "image/jpeg",
-              upsert: true,
-            });
-
-          if (!uploadErr && uploadData) {
-            const { data: urlData } = serviceClient.storage
+            const { data: uploadData, error: uploadErr } = await serviceClient.storage
               .from("payment-proofs")
-              .getPublicUrl(fileName);
+              .upload(fileName, buffer, {
+                contentType: "image/jpeg",
+                upsert: true,
+              });
 
-            if (urlData?.publicUrl) {
-              storagePublicUrl = urlData.publicUrl;
+            if (!uploadErr && uploadData) {
+              const { data: urlData } = serviceClient.storage
+                .from("payment-proofs")
+                .getPublicUrl(fileName);
+
+              if (urlData?.publicUrl) {
+                storagePublicUrl = urlData.publicUrl;
+              }
             }
           }
         }
+      } catch (storageErr) {
+        console.warn("Supabase Storage bucket upload notice:", storageErr);
       }
-    } catch (storageErr) {
-      console.warn("Supabase Storage bucket upload notice:", storageErr);
-    }
 
-    const finalProofUrlToSave = storagePublicUrl || proofUrl;
+      const finalProofUrlToSave = storagePublicUrl || proofUrl;
 
-    // 2. Fetch target row to update items_json
-    const { data: currentOrder } = await serviceClient
-      .from("order_intents")
-      .select("*")
-      .eq("id", targetId)
-      .single();
+      // Insert record into payment_proofs table (Single Source of Truth)
+      const { error: proofInsertErr } = await serviceClient
+        .from("payment_proofs")
+        .insert([{
+          order_id: targetOrder.id,
+          image_url: finalProofUrlToSave
+        }]);
 
-    let updatedItemsJson = "";
-    if (currentOrder?.items_json) {
-      try {
-        let parsed = typeof currentOrder.items_json === "string" ? JSON.parse(currentOrder.items_json) : currentOrder.items_json;
-        if (typeof parsed === "string") {
-          parsed = JSON.parse(parsed);
-        }
-        if (typeof parsed === "object" && !Array.isArray(parsed)) {
-          parsed.payment_proof_url = finalProofUrlToSave;
-          parsed.paymentProofUrl = finalProofUrlToSave;
-          parsed.payment_status = "pending_verification";
-          updatedItemsJson = JSON.stringify(parsed);
-        } else {
-          updatedItemsJson = JSON.stringify({
-            items: parsed,
-            payment_proof_url: finalProofUrlToSave,
-            paymentProofUrl: finalProofUrlToSave,
-            payment_status: "pending_verification",
-          });
-        }
-      } catch {
-        updatedItemsJson = JSON.stringify({
-          payment_proof_url: finalProofUrlToSave,
-          paymentProofUrl: finalProofUrlToSave,
-          payment_status: "pending_verification",
-        });
+      if (proofInsertErr) {
+        console.error("Error inserting into payment_proofs:", proofInsertErr);
+        return NextResponse.json({ error: proofInsertErr.message }, { status: 500 });
       }
-    } else {
-      updatedItemsJson = JSON.stringify({
-        payment_proof_url: finalProofUrlToSave,
-        paymentProofUrl: finalProofUrlToSave,
-        payment_status: "pending_verification",
+
+      // Update payment_status on orders table to pending_verification
+      await serviceClient
+        .from("orders")
+        .update({ payment_status: "pending_verification" })
+        .eq("id", targetOrder.id);
+
+      return NextResponse.json({
+        success: true,
+        orderId: targetOrder.id,
+        order_code: targetOrder.order_code,
+        proofUrl: finalProofUrlToSave,
+        usedStorage: !!storagePublicUrl
       });
     }
 
-    // 3. Update order_intents row in DB
-    const { error: fullErr } = await serviceClient
-      .from("order_intents")
-      .update({
-        payment_proof_url: finalProofUrlToSave,
-        payment_status: "pending_verification",
-        items_json: updatedItemsJson,
-      })
-      .eq("id", targetId);
-
-    if (fullErr) {
-      console.warn("Full column update notice, applying guaranteed items_json update:", fullErr);
-      const { error: fallbackErr } = await serviceClient
-        .from("order_intents")
-        .update({
-          items_json: updatedItemsJson,
-        })
-        .eq("id", targetId);
-
-      if (fallbackErr) {
-        console.error("Guaranteed items_json update error:", fallbackErr);
-        return NextResponse.json({ error: fallbackErr.message }, { status: 500 });
-      }
+    // 2. Fallback Hibrid: Check historical 'order_intents' table
+    let fallbackSearchQuery = serviceClient.from("order_intents").select("id, items_json");
+    if (!isNaN(numericId) && numericId > 0 && String(numericId) === queryCode) {
+      fallbackSearchQuery = fallbackSearchQuery.or(`id.eq.${numericId},order_code.eq.${queryCode}`);
+    } else {
+      fallbackSearchQuery = fallbackSearchQuery.or(`order_code.eq.${queryCode},id.eq.${queryCode},items_json.ilike.%${queryCode}%`);
     }
 
-    return NextResponse.json({
-      success: true,
-      targetId,
-      proofUrl: finalProofUrlToSave,
-      usedStorage: !!storagePublicUrl
-    });
+    const { data: foundIntents } = await fallbackSearchQuery.limit(1);
+
+    if (foundIntents && foundIntents.length > 0) {
+      const targetIntent = foundIntents[0];
+
+      let storagePublicUrl: string | null = null;
+      try {
+        if (typeof proofUrl === "string" && proofUrl.startsWith("data:image")) {
+          const base64Data = proofUrl.split(",")[1];
+          if (base64Data) {
+            const buffer = Buffer.from(base64Data, "base64");
+            const fileName = `proof_intent_${targetIntent.id}_${Date.now()}.jpg`;
+
+            const { data: uploadData, error: uploadErr } = await serviceClient.storage
+              .from("payment-proofs")
+              .upload(fileName, buffer, {
+                contentType: "image/jpeg",
+                upsert: true,
+              });
+
+            if (!uploadErr && uploadData) {
+              const { data: urlData } = serviceClient.storage
+                .from("payment-proofs")
+                .getPublicUrl(fileName);
+
+              if (urlData?.publicUrl) {
+                storagePublicUrl = urlData.publicUrl;
+              }
+            }
+          }
+        }
+      } catch (storageErr) {
+        console.warn("Supabase Storage bucket upload notice:", storageErr);
+      }
+
+      const finalProofUrlToSave = storagePublicUrl || proofUrl;
+
+      // Update order_intents row
+      await serviceClient
+        .from("order_intents")
+        .update({
+          payment_proof_url: finalProofUrlToSave,
+          payment_status: "pending_verification"
+        })
+        .eq("id", targetIntent.id);
+
+      return NextResponse.json({
+        success: true,
+        orderId: targetIntent.id,
+        proofUrl: finalProofUrlToSave,
+        usedStorage: !!storagePublicUrl
+      });
+    }
+
+    return NextResponse.json({ error: `Pesanan #${orderId} tidak ditemukan. Mohon periksa kembali kode pesanan Anda.` }, { status: 404 });
   } catch (err) {
     console.error("Proof upload API error:", err);
     const msg = err instanceof Error ? err.message : "Internal server error";

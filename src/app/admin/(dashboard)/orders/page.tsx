@@ -584,10 +584,6 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
       currentMeta.fulfillmentStatus = "ready_for_pickup";
       const updatedItemsJson = JSON.stringify(currentMeta);
 
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`alparfume_intent_fulfill_${intent.id}`, "ready_for_pickup");
-      }
-
       const res = await fetch("/api/admin/intents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...authHeader },
@@ -601,10 +597,9 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
       });
 
       if (!res.ok) {
-        await supabase
-          .from("order_intents")
-          .update({ fulfillment_status: "ready_for_pickup", items_json: updatedItemsJson })
-          .eq("id", intent.id);
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.error || "Gagal mengubah status pesanan.");
+        return;
       }
 
       setIntents((prev) =>
@@ -614,6 +609,7 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
             : item
         )
       );
+      fetchIntents(intentsPage, true);
     } catch (err) {
       console.error("Gagal mengubah status siap diambil di toko:", err);
     }
@@ -623,10 +619,6 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
     if (!confirm(`Konfirmasi pembayaran lunas untuk pesanan ${intent.customer_name || ""}?`)) return;
 
     try {
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`alparfume_intent_status_${intent.id}`, "paid");
-      }
-
       // Build merged items_json payload
       let currentMeta: Record<string, unknown> = {};
       if (intent.items_json) {
@@ -662,14 +654,9 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
       });
 
       if (!res.ok) {
-        await supabase
-          .from("order_intents")
-          .update({ 
-            payment_status: "paid",
-            fulfillment_status: "packing",
-            items_json: updatedItemsJson,
-          })
-          .eq("id", intent.id);
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.error || "Gagal mengonfirmasi pembayaran. Silakan periksa kembali ketersediaan stok.");
+        return;
       }
 
       setIntents((prev) =>
@@ -747,15 +734,9 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
       });
 
       if (!res.ok) {
-        await supabase
-          .from("order_intents")
-          .update({
-            fulfillment_status: "completed",
-            payment_status: "paid",
-            payment_proof_url: null,
-            items_json: updatedItemsJson,
-          })
-          .eq("id", intent.id);
+        const errJson = await res.json().catch(() => ({}));
+        alert(errJson.error || "Gagal menyelesaikan pesanan. Silakan periksa kembali ketersediaan stok.");
+        return;
       }
 
       // 2. If proof image exists in storage, delete it from storage bucket
@@ -1119,15 +1100,9 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                         itemsJsonString.includes('"delivery_method":"pickup"') ||
                         itemsJsonString.includes('"Ambil di Toko"')));
 
-                  const localStatus = typeof window !== "undefined" ? localStorage.getItem(`alparfume_intent_status_${int.id}`) : null;
-                  
-                  let effectivePaymentStatus = "pending_verification";
-                  if (localStatus === "paid" || int.payment_status === "paid" || (parsedMeta && !Array.isArray(parsedMeta) && parsedMeta.payment_status === "paid")) {
+                  let effectivePaymentStatus = int.payment_status || "pending_verification";
+                  if (int.payment_status === "paid" || (parsedMeta && !Array.isArray(parsedMeta) && parsedMeta.payment_status === "paid")) {
                     effectivePaymentStatus = "paid";
-                  } else if (localStatus === "pending_verification") {
-                    effectivePaymentStatus = "pending_verification";
-                  } else if (int.payment_status) {
-                    effectivePaymentStatus = int.payment_status;
                   } else if (parsedMeta && !Array.isArray(parsedMeta) && typeof parsedMeta.payment_status === "string") {
                     effectivePaymentStatus = parsedMeta.payment_status as string;
                   }
@@ -1137,12 +1112,9 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                     effectiveProofUrl = parsedMeta.payment_proof_url;
                   }
 
-                  const localFulfill = typeof window !== "undefined" ? localStorage.getItem(`alparfume_intent_fulfill_${int.id}`) : null;
                   const effectiveFulfillmentStatus =
-                    localFulfill ||
-                    (int.fulfillment_status && int.fulfillment_status !== "pending" ? int.fulfillment_status : null) ||
-                    (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.fulfillment_status || parsedMeta.fulfillmentStatus) : null) ||
                     int.fulfillment_status ||
+                    (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.fulfillment_status || parsedMeta.fulfillmentStatus) : null) ||
                     "pending";
                   const effectiveTrackingNumber = int.tracking_number || (parsedMeta && !Array.isArray(parsedMeta) ? (parsedMeta.tracking_number || parsedMeta.trackingNumber || null) : null);
                   if (!effectiveProofUrl && itemsJsonString) {

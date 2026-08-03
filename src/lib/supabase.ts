@@ -75,7 +75,8 @@ export interface OrderIntent {
   shipping_cost?: number;
   tracking_number?: string | null;
   destination_city?: string | null;
-  destination_subdistrict?: string | null;
+  delivery_method?: string | null;
+  subtotal?: number;
   total_price?: number;
   order_code?: string | null;
   created_at: string;

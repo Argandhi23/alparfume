@@ -5,6 +5,7 @@ export interface AdminAuthResult {
   isAuthorized: boolean;
   errorResponse?: NextResponse;
   userId?: string;
+  email?: string;
 }
 
 /**
@@ -68,6 +69,7 @@ export async function verifyAdminSession(request: NextRequest): Promise<AdminAut
   return {
     isAuthorized: true,
     userId: user.id,
+    email: user.email || `admin_${user.id.slice(0, 8)}@alparfume.com`,
   };
 }
 

@@ -52,9 +52,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setItems((prevItems) => {
       const existingItemIndex = prevItems.findIndex((item) => item.id === newItem.id);
       if (existingItemIndex > -1) {
-        const updatedItems = [...prevItems];
-        updatedItems[existingItemIndex].quantity += 1;
-        return updatedItems;
+        return prevItems.map((item, index) =>
+          index === existingItemIndex
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        );
       }
       return [...prevItems, { ...newItem, quantity: 1 }];
     });

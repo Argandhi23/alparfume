@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rateLimit";
 
 interface ProductVariant {
-  id: number;
+  id: string; // UUID
   product_id: string;
   size_ml: number;
   price: number;
+  stock: number;
 }
 
 interface ProductWithVariants {
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
       const itemQty = Math.max(1, Math.floor(Number(item.quantity || item.qty) || 1));
 
       let matchedUnitPrice = 0;
+      let matchedVariantId: string | null = null;
 
       // Find matching product in database
       const matchedProduct = productsList.find((p) => 
@@ -127,12 +129,15 @@ export async function POST(request: NextRequest) {
           (v) => Number(v.size_ml) === itemSize
         ) || matchedProduct.product_variants[0];
 
-        if (matchedVariant && typeof matchedVariant.price === "number") {
-          matchedUnitPrice = matchedVariant.price;
+        if (matchedVariant) {
+          if (typeof matchedVariant.price === "number") {
+            matchedUnitPrice = matchedVariant.price;
+          }
+          matchedVariantId = matchedVariant.id;
         }
       }
 
-      // Hardcoded safety fallback if database variant query was empty
+      // Safety fallback
       if (matchedUnitPrice <= 0) {
         if (isSampleProduct || itemSize <= 15) matchedUnitPrice = 25000;
         else if (itemSize === 30 || itemSize === 35) matchedUnitPrice = 45000;
@@ -151,6 +156,7 @@ export async function POST(request: NextRequest) {
         quantity: itemQty,
         price: matchedUnitPrice,
         totalItemPrice: itemTotal,
+        variantId: matchedVariantId,
       };
     });
 
@@ -163,78 +169,112 @@ export async function POST(request: NextRequest) {
       if (!isNaN(requestedShippingCost) && requestedShippingCost >= 0) {
         validatedShippingCost = Math.floor(requestedShippingCost);
       } else {
-        validatedShippingCost = 14000; // Default standard courier shipping rate
+        validatedShippingCost = 14000;
       }
     } else {
-      validatedShippingCost = 0; // Store Pickup / COD Madiun is free
+      validatedShippingCost = 0;
     }
 
-    // 4. Authoritative Server Total Price
+    // 4. Server Grand Total Price
     const serverGrandTotal = serverSubtotal + validatedShippingCost;
+    const sanitizedCustomerName = String(customer_name).slice(0, 150).trim();
+    const sanitizedAddress = customer_address ? String(customer_address).slice(0, 1000).trim() : null;
+    const sanitizedOrderNotes = cleanPayload.order_notes ? String(cleanPayload.order_notes).slice(0, 500).trim() : null;
 
-    // Update items_json metadata with server-computed values
-    parsedMeta.items = validatedItems;
-    parsedMeta.subtotal = serverSubtotal;
-    parsedMeta.shipping_cost = validatedShippingCost;
-    parsedMeta.grand_total = serverGrandTotal;
-    parsedMeta.delivery_method = deliveryMethod;
+    // 5. Find or Create Customer in 'customers' table
+    let customerId: string | null = null;
+    const { data: existingCustomer } = await serviceClient
+      .from("customers")
+      .select("id")
+      .eq("wa_number", sanitizedWa)
+      .eq("name", sanitizedCustomerName)
+      .maybeSingle();
 
-    const finalItemsJson = JSON.stringify(parsedMeta);
+    if (existingCustomer) {
+      customerId = existingCustomer.id;
+    } else {
+      const { data: newCust, error: custErr } = await serviceClient
+        .from("customers")
+        .insert([{
+          name: sanitizedCustomerName,
+          wa_number: sanitizedWa,
+          address: sanitizedAddress
+        }])
+        .select("id")
+        .single();
 
-    // Sanitize payload with server-calculated price
-    const sanitizedPayload = {
-      ...cleanPayload,
-      product_name: String(product_name).slice(0, 255).trim(),
-      customer_name: String(customer_name).slice(0, 150).trim(),
-      customer_wa: sanitizedWa,
-      customer_address: customer_address ? String(customer_address).slice(0, 1000).trim() : null,
-      price: serverGrandTotal,
-      total_price: serverGrandTotal,
-      shipping_cost: validatedShippingCost,
-      items_json: finalItemsJson,
-    };
+      if (custErr) {
+        console.error("Error creating customer in /api/orders/create:", custErr);
+        return NextResponse.json({ error: "Gagal menyimpan data pelanggan" }, { status: 500 });
+      }
+      customerId = newCust.id;
+    }
 
-    let { data, error } = await serviceClient
-      .from("order_intents")
-      .insert([sanitizedPayload])
+    // 6. Generate Unique Order Code
+    const generatedOrderCode = `ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const paymentMethod = String(cleanPayload.payment_method || parsedMeta.payment_method || (deliveryMethod === "pickup" ? "cod_pickup" : "qris"));
+    const initialPaymentStatus = paymentMethod === "cod_pickup" ? "cod_pickup" : "pending_verification";
+
+    // 7. Insert Order into 'orders' table
+    const { data: createdOrder, error: orderErr } = await serviceClient
+      .from("orders")
+      .insert([{
+        order_code: generatedOrderCode,
+        customer_id: customerId,
+        subtotal: serverSubtotal,
+        shipping_cost: validatedShippingCost,
+        delivery_method: deliveryMethod,
+        grand_total: serverGrandTotal,
+        payment_method: paymentMethod,
+        payment_status: initialPaymentStatus,
+        fulfillment_status: "pending",
+        order_notes: sanitizedOrderNotes
+      }])
       .select()
       .single();
 
-    // Fallback: If ANY error occurs (schema mismatch, missing column, PGRST204, etc.), retry with guaranteed core payload
-    if (error) {
-      console.warn("Retrying order creation with guaranteed core payload:", error.message);
-      
-      const corePayload = {
-        product_name: String(product_name).slice(0, 255).trim(),
-        size_ml: Number(cleanPayload.size_ml) || 35,
-        price: serverGrandTotal,
-        customer_name: String(customer_name).slice(0, 150).trim(),
-        customer_wa: sanitizedWa,
-        customer_address: customer_address ? String(customer_address).slice(0, 1000).trim() : null,
-        order_notes: cleanPayload.order_notes ? String(cleanPayload.order_notes).slice(0, 500).trim() : null,
-        items_json: finalItemsJson,
-      };
-
-      const fallbackResult = await serviceClient
-        .from("order_intents")
-        .insert([corePayload])
-        .select()
-        .single();
-
-      data = fallbackResult.data;
-      error = fallbackResult.error;
+    if (orderErr || !createdOrder) {
+      console.error("Error inserting order into 'orders':", orderErr);
+      return NextResponse.json({ error: orderErr?.message || "Gagal membuat pesanan baru" }, { status: 500 });
     }
 
-    if (error) {
-      console.error("Database insert error in /api/orders/create:", error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // 8. Insert Order Items into 'order_items' table
+    const orderItemsPayload = validatedItems.map(item => ({
+      order_id: createdOrder.id,
+      variant_id: item.variantId,
+      product_name_snapshot: item.productName,
+      size_ml_snapshot: item.sizeMl,
+      qty: item.quantity,
+      price_snapshot: item.price,
+      total_price: item.totalItemPrice
+    }));
+
+    const { error: itemsErr } = await serviceClient
+      .from("order_items")
+      .insert(orderItemsPayload);
+
+    if (itemsErr) {
+      console.error("Error inserting order_items into DB:", itemsErr);
     }
 
-    return NextResponse.json({ success: true, data });
+    // Format response compatible with frontend expected response
+    const formattedData = {
+      id: createdOrder.id,
+      order_code: createdOrder.order_code,
+      product_name: String(product_name).slice(0, 255).trim(),
+      customer_name: sanitizedCustomerName,
+      customer_wa: sanitizedWa,
+      customer_address: sanitizedAddress,
+      price: serverGrandTotal,
+      total_price: serverGrandTotal,
+      grand_total: serverGrandTotal,
+      created_at: createdOrder.created_at
+    };
+
+    return NextResponse.json({ success: true, data: formattedData });
   } catch (err) {
     console.error("Order creation API error:", err);
     const msg = err instanceof Error ? err.message : "Internal server error";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
-
