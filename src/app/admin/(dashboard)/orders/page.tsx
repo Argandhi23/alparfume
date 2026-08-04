@@ -397,7 +397,7 @@ export default function OrdersPage() {
 
   const buildCustomerWaConfirmationMessage = (intent: OrderIntent): string => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://alparfume.com";
-    const trackingUrl = `${origin}/orders/${intent.id}`;
+    const trackingUrl = `${origin}/orders/${intent.order_code || intent.id}`;
     const orderCode = intent.order_code || (intent.id ? String(intent.id).substring(0, 8).toUpperCase() : "PESANAN");
     const customerName = intent.customer_name || "Pelanggan";
 
@@ -476,7 +476,7 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
     if (!intent.tracking_number || !intent.customer_wa) return;
     const waNumber = formatWaForUrl(intent.customer_wa);
     const origin = typeof window !== "undefined" ? window.location.origin : "https://alparfume.com";
-    const trackingUrl = `${origin}/orders/${intent.id}`;
+    const trackingUrl = `${origin}/orders/${intent.order_code || intent.id}`;
     const message = `Halo Kak ${intent.customer_name || ""}, pesanan Anda #${intent.order_code || intent.id} di Al Parfume telah dikirim! 🚀\n\nNo. Resi Pengiriman: *${intent.tracking_number}*\n\nAnda dapat mengecek status & tracking live pesanan Anda di link berikut:\n${trackingUrl}\n\nTerima kasih telah berbelanja di Al Parfume! ✨`;
     const waUrl = `https://api.whatsapp.com/send?phone=${waNumber}&text=${encodeURIComponent(message)}`;
     window.open(waUrl, "_blank");

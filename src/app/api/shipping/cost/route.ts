@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 const API_KEY = process.env.RAJAONGKIR_API_KEY || process.env.BINDERBYTE_API_KEY || "";
 const KOMERCE_BASE = "https://rajaongkir.komerce.id/api/v1";
@@ -25,10 +26,14 @@ interface KomerceDestination {
   zip_code: string;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const rateLimit = checkRateLimit(request, 45, 60 * 1000);
+    if (!rateLimit.success) {
+      return rateLimit.response!;
+    }
     const body = await request.json();
-    const { province, city, district, weight } = body || {};
+    const { province, city, district, weight, force_fallback } = body || {};
     const sanitizeStr = (val: unknown) => typeof val === "string" ? val.replace(/[^\w\s,.-]/gi, "").trim().slice(0, 100) : "";
     const cleanProvince = sanitizeStr(province);
     const cleanCity = sanitizeStr(city);
@@ -36,6 +41,14 @@ export async function POST(request: Request) {
 
     const parsedWeight = typeof weight === "number" && weight > 0 && weight <= 50000 ? weight : 500;
     const weightKg = Math.max(1, Math.ceil(parsedWeight / 1000));
+
+    const isDev = process.env.NODE_ENV === "development";
+    const secretTestKey = process.env.SHIPPING_TEST_SECRET;
+    const headerTestKey = request.headers.get("x-shipping-test-secret");
+
+    // Protection: force_fallback is strictly disabled in production unless accompanied by an internal secret header
+    const isTestingFallback = (isDev && (force_fallback === true || request.headers.get("x-force-fallback") === "true")) ||
+      (Boolean(secretTestKey) && headerTestKey === secretTestKey);
 
     const searchQueries: string[] = [];
     if (cleanDistrict && cleanCity) searchQueries.push(`${cleanDistrict}, ${cleanCity}`);
@@ -46,12 +59,12 @@ export async function POST(request: Request) {
     let destinationId: number | null = null;
     let matchedDestinationLabel = "";
 
-    if (!API_KEY) {
+    if (!API_KEY && !isTestingFallback) {
       console.warn("Shipping Cost API: RAJAONGKIR_API_KEY / BINDERBYTE_API_KEY is missing. Falling back to internal tariff engine.");
     }
 
-    // 1. SEARCH DESTINATION ID VIA KOMERCE API
-    if (API_KEY && searchQueries.length > 0) {
+    // 1. SEARCH DESTINATION ID VIA KOMERCE API (Skipped if testing fallback or no API_KEY)
+    if (API_KEY && !isTestingFallback && searchQueries.length > 0) {
       for (const query of searchQueries) {
         try {
           const searchRes = await fetch(`${KOMERCE_BASE}/destination/domestic-destination?search=${encodeURIComponent(query)}`, {
@@ -81,7 +94,7 @@ export async function POST(request: Request) {
     }
 
     // 2. CALCULATE LIVE COSTS VIA KOMERCE V2 API WITH DYNAMIC WEIGHT
-    if (API_KEY && destinationId) {
+    if (API_KEY && !isTestingFallback && destinationId) {
       try {
         const couriers = ["jne", "jnt", "sicepat", "pos", "anteraja", "ide", "ninja", "lion", "spx"];
         const liveRatesResults = await Promise.all(
@@ -169,24 +182,195 @@ export async function POST(request: Request) {
     // 3. REALISTIC FALLBACK ENGINE (Multiplied by weightKg)
     const combinedLocation = `${district || ""} ${city || ""} ${province || ""}`.toLowerCase().trim();
     
-    let baseTariff = { jnt: 14000, jne: 12000, sicepat: 11000, pos: 10000 };
+    // Default Tariff (for completely unrecognized locations)
+    let baseTariff = { jnt: 22000, jne: 20000, sicepat: 19000, pos: 18000 };
 
-    if (combinedLocation.includes("papua") || combinedLocation.includes("jayapura") || combinedLocation.includes("merauke")) {
-      baseTariff = { jnt: 160000, jne: 156000, sicepat: 145000, pos: 135000 };
-    } else if (combinedLocation.includes("maluku") || combinedLocation.includes("ambon") || combinedLocation.includes("ternate")) {
-      baseTariff = { jnt: 90000, jne: 85000, sicepat: 80000, pos: 75000 };
-    } else if (combinedLocation.includes("sulawesi") || combinedLocation.includes("makassar") || combinedLocation.includes("manado") || combinedLocation.includes("palu")) {
-      baseTariff = { jnt: 46000, jne: 52000, sicepat: 53000, pos: 49000 };
-    } else if (combinedLocation.includes("sumatra") || combinedLocation.includes("sumatera") || combinedLocation.includes("medan") || combinedLocation.includes("palembang") || combinedLocation.includes("padang") || combinedLocation.includes("lampung")) {
-      baseTariff = { jnt: 45000, jne: 57000, sicepat: 43000, pos: 45000 };
-    } else if (combinedLocation.includes("kalimantan") || combinedLocation.includes("pontianak") || combinedLocation.includes("banjarmasin") || combinedLocation.includes("balikpapan")) {
-      baseTariff = { jnt: 50000, jne: 48000, sicepat: 45000, pos: 42000 };
-    } else if (combinedLocation.includes("ntb") || combinedLocation.includes("ntt") || combinedLocation.includes("bali") || combinedLocation.includes("denpasar") || combinedLocation.includes("mataram")) {
-      baseTariff = { jnt: 32000, jne: 28000, sicepat: 27000, pos: 25000 };
-    } else if (combinedLocation.includes("jakarta") || combinedLocation.includes("bogor") || combinedLocation.includes("depok") || combinedLocation.includes("tangerang") || combinedLocation.includes("bekasi")) {
-      baseTariff = { jnt: 13000, jne: 11000, sicepat: 10000, pos: 10000 };
-    } else if (combinedLocation.includes("surabaya") || combinedLocation.includes("sidoarjo") || combinedLocation.includes("gresik")) {
+    // Overlap-safe matching hierarchy (checked from specific/near to broad/remote)
+    // RING 1: Gerbangkertosusila & Surabaya Raya (Checked FIRST to avoid "bangkalan" matching "bangka")
+    if (
+      combinedLocation.includes("surabaya") ||
+      combinedLocation.includes("sidoarjo") ||
+      combinedLocation.includes("gresik") ||
+      combinedLocation.includes("mojokerto") ||
+      combinedLocation.includes("lamongan") ||
+      combinedLocation.includes("bangkalan") ||
+      combinedLocation.includes("pasuruan")
+    ) {
       baseTariff = { jnt: 9000, jne: 8000, sicepat: 8000, pos: 7000 };
+    }
+    // TIER 1: PAPUA & MALUKU
+    else if (
+      combinedLocation.includes("papua") ||
+      combinedLocation.includes("jayapura") ||
+      combinedLocation.includes("merauke") ||
+      combinedLocation.includes("timika") ||
+      combinedLocation.includes("sorong") ||
+      combinedLocation.includes("manokwari") ||
+      combinedLocation.includes("biak") ||
+      combinedLocation.includes("nabire") ||
+      combinedLocation.includes("maluku") ||
+      combinedLocation.includes("ambon") ||
+      combinedLocation.includes("ternate") ||
+      combinedLocation.includes("tidore")
+    ) {
+      baseTariff = { jnt: 120000, jne: 115000, sicepat: 110000, pos: 95000 };
+    }
+    // TIER 2: SULAWESI, BALI & NUSA TENGGARA
+    else if (
+      combinedLocation.includes("sulawesi") ||
+      combinedLocation.includes("makassar") ||
+      combinedLocation.includes("manado") ||
+      combinedLocation.includes("palu") ||
+      combinedLocation.includes("kendari") ||
+      combinedLocation.includes("gorontalo") ||
+      combinedLocation.includes("mamuju") ||
+      combinedLocation.includes("bali") ||
+      combinedLocation.includes("denpasar") ||
+      combinedLocation.includes("singaraja") ||
+      combinedLocation.includes("ubud") ||
+      combinedLocation.includes("ntb") ||
+      combinedLocation.includes("ntt") ||
+      combinedLocation.includes("mataram") ||
+      combinedLocation.includes("kupang") ||
+      combinedLocation.includes("labuan bajo") ||
+      combinedLocation.includes("bima") ||
+      combinedLocation.includes("sumbawa")
+    ) {
+      baseTariff = { jnt: 35000, jne: 32000, sicepat: 30000, pos: 28000 };
+    }
+    // TIER 3: KALIMANTAN (Checked before "banjar" in Jabar)
+    else if (
+      combinedLocation.includes("kalimantan") ||
+      combinedLocation.includes("banjarmasin") ||
+      combinedLocation.includes("balikpapan") ||
+      combinedLocation.includes("samarinda") ||
+      combinedLocation.includes("pontianak") ||
+      combinedLocation.includes("palangkaraya") ||
+      combinedLocation.includes("tarakan") ||
+      combinedLocation.includes("banjarbaru") ||
+      combinedLocation.includes("singkawang")
+    ) {
+      baseTariff = { jnt: 42000, jne: 40000, sicepat: 38000, pos: 35000 };
+    }
+    // TIER 4: SUMATERA & KEP. RIAU / BANGKA BELITUNG (Checked before "solo" & "batu")
+    else if (
+      combinedLocation.includes("sumatra") ||
+      combinedLocation.includes("sumatera") ||
+      combinedLocation.includes("medan") ||
+      combinedLocation.includes("palembang") ||
+      combinedLocation.includes("padang") ||
+      combinedLocation.includes("lampung") ||
+      combinedLocation.includes("pekanbaru") ||
+      combinedLocation.includes("batam") ||
+      combinedLocation.includes("bengkulu") ||
+      combinedLocation.includes("jambi") ||
+      combinedLocation.includes("aceh") ||
+      combinedLocation.includes("bangka") ||
+      combinedLocation.includes("belitung") ||
+      combinedLocation.includes("riau") ||
+      combinedLocation.includes("solok") ||
+      combinedLocation.includes("batusangkar")
+    ) {
+      baseTariff = { jnt: 45000, jne: 42000, sicepat: 40000, pos: 38000 };
+    }
+    // TIER 5: JAWA TENGAH & DI YOGYAKARTA (Checked before Jabar to catch banjarnegara & surakarta properly)
+    else if (
+      combinedLocation.includes("jawa tengah") ||
+      combinedLocation.includes("yogyakarta") ||
+      combinedLocation.includes("jogja") ||
+      combinedLocation.includes("semarang") ||
+      combinedLocation.includes("solo") ||
+      combinedLocation.includes("surakarta") ||
+      combinedLocation.includes("sleman") ||
+      combinedLocation.includes("bantul") ||
+      combinedLocation.includes("magelang") ||
+      combinedLocation.includes("kudus") ||
+      combinedLocation.includes("pati") ||
+      combinedLocation.includes("pekalongan") ||
+      combinedLocation.includes("tegal") ||
+      combinedLocation.includes("purwokerto") ||
+      combinedLocation.includes("banyumas") ||
+      combinedLocation.includes("cilacap") ||
+      combinedLocation.includes("sragen") ||
+      combinedLocation.includes("karanganyar") ||
+      combinedLocation.includes("boyolali") ||
+      combinedLocation.includes("klaten") ||
+      combinedLocation.includes("wonogiri") ||
+      combinedLocation.includes("demak") ||
+      combinedLocation.includes("kendal") ||
+      combinedLocation.includes("jepara") ||
+      combinedLocation.includes("grobogan") ||
+      combinedLocation.includes("blora") ||
+      combinedLocation.includes("rembang") ||
+      combinedLocation.includes("temanggung") ||
+      combinedLocation.includes("wonosobo") ||
+      combinedLocation.includes("banjarnegara") ||
+      combinedLocation.includes("purbalingga") ||
+      combinedLocation.includes("kebumen") ||
+      combinedLocation.includes("purworejo") ||
+      combinedLocation.includes("brebes")
+    ) {
+      baseTariff = { jnt: 15000, jne: 13000, sicepat: 12000, pos: 11000 };
+    }
+    // TIER 6: JABODETABEK, JAWA BARAT & BANTEN
+    else if (
+      combinedLocation.includes("jakarta") ||
+      combinedLocation.includes("bogor") ||
+      combinedLocation.includes("depok") ||
+      combinedLocation.includes("tangerang") ||
+      combinedLocation.includes("bekasi") ||
+      combinedLocation.includes("jawa barat") ||
+      combinedLocation.includes("banten") ||
+      combinedLocation.includes("bandung") ||
+      combinedLocation.includes("cimahi") ||
+      combinedLocation.includes("cirebon") ||
+      combinedLocation.includes("sukabumi") ||
+      combinedLocation.includes("tasikmalaya") ||
+      combinedLocation.includes("garut") ||
+      combinedLocation.includes("purwakarta") ||
+      combinedLocation.includes("subang") ||
+      combinedLocation.includes("sumedang") ||
+      combinedLocation.includes("indramayu") ||
+      combinedLocation.includes("majalengka") ||
+      combinedLocation.includes("ciamis") ||
+      combinedLocation.includes("kuningan") ||
+      combinedLocation.includes("cianjur") ||
+      combinedLocation.includes("karawang") ||
+      combinedLocation.includes("serang") ||
+      combinedLocation.includes("cilegon") ||
+      combinedLocation.includes("lebak") ||
+      combinedLocation.includes("pandeglang") ||
+      combinedLocation.includes("kota banjar")
+    ) {
+      baseTariff = { jnt: 18000, jne: 16000, sicepat: 15000, pos: 14000 };
+    }
+    // TIER 7: JAWA TIMUR (Luar Gerbangkertosusila)
+    else if (
+      combinedLocation.includes("jawa timur") ||
+      combinedLocation.includes("malang") ||
+      combinedLocation.includes("kediri") ||
+      combinedLocation.includes("madiun") ||
+      combinedLocation.includes("jember") ||
+      combinedLocation.includes("banyuwangi") ||
+      combinedLocation.includes("tuban") ||
+      combinedLocation.includes("probolinggo") ||
+      combinedLocation.includes("blitar") ||
+      combinedLocation.includes("tulungagung") ||
+      combinedLocation.includes("ngawi") ||
+      combinedLocation.includes("ponorogo") ||
+      combinedLocation.includes("pacitan") ||
+      combinedLocation.includes("bondowoso") ||
+      combinedLocation.includes("situbondo") ||
+      combinedLocation.includes("lumajang") ||
+      combinedLocation.includes("nganjuk") ||
+      combinedLocation.includes("magetan") ||
+      combinedLocation.includes("trenggalek") ||
+      combinedLocation.includes("sampang") ||
+      combinedLocation.includes("pamekasan") ||
+      combinedLocation.includes("sumenep") ||
+      combinedLocation.includes("batu")
+    ) {
+      baseTariff = { jnt: 11000, jne: 10000, sicepat: 9500, pos: 9000 };
     }
 
     const fallbackRates = [
@@ -199,7 +383,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       is_live_api: false,
-      provider: "Internal Engine Fallback",
+      provider: isTestingFallback ? "Internal Engine Fallback (Testing Mode)" : "Internal Engine Fallback",
       weight: parsedWeight,
       weight_kg: weightKg,
       rates: fallbackRates,

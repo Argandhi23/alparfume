@@ -318,7 +318,7 @@ export function CheckoutClient() {
         }),
       };
 
-      let finalOrderId: number | null = null;
+      let finalOrderId: string | number | null = null;
 
       const createRes = await fetch("/api/orders/create", {
         method: "POST",
@@ -334,8 +334,8 @@ export function CheckoutClient() {
       }
 
       const resJson = await createRes.json();
-      if (resJson.data?.id) {
-        finalOrderId = resJson.data.id;
+      if (resJson.data?.order_code || resJson.data?.id) {
+        finalOrderId = resJson.data.order_code || resJson.data.id;
       } else {
         alert("Gagal mendapatkan ID pesanan. Silakan coba lagi.");
         setSubmitting(false);

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit } from "@/lib/rateLimit";
 
 const API_KEY = process.env.RAJAONGKIR_API_KEY || "";
 const RAJAONGKIR_BASE = "https://api.rajaongkir.com/starter";
@@ -55,7 +56,11 @@ function capitalizeWords(str: string) {
     .join(" ");
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const rateLimit = checkRateLimit(request, 60, 60 * 1000);
+  if (!rateLimit.success) {
+    return rateLimit.response!;
+  }
   const { searchParams } = new URL(request.url);
   const type = searchParams.get("type");
   const provinceId = searchParams.get("province_id");

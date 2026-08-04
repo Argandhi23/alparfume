@@ -106,6 +106,22 @@ async function getOrderDetails(id: string): Promise<OrderIntent | null> {
   }
 }
 
+function maskWaNumber(wa: string | null | undefined): string | null {
+  if (!wa) return null;
+  const clean = wa.replace(/[^\d]/g, "");
+  if (clean.length < 8) return "0819****1190";
+  return `${clean.slice(0, 4)}****${clean.slice(-4)}`;
+}
+
+function maskAddress(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+  }
+  return address;
+}
+
 export async function generateMetadata({ params }: OrderPageProps) {
   return {
     title: `Pesanan #${params.id} | Al Parfume`,
@@ -115,6 +131,12 @@ export async function generateMetadata({ params }: OrderPageProps) {
 
 export default async function OrderPage({ params }: OrderPageProps) {
   const initialOrder = await getOrderDetails(params.id);
+  const canonicalOrderCode = initialOrder?.order_code || params.id;
+
+  if (initialOrder) {
+    initialOrder.customer_wa = maskWaNumber(initialOrder.customer_wa);
+    initialOrder.customer_address = maskAddress(initialOrder.customer_address);
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-brandWhite text-brandBlack font-sans">
@@ -131,7 +153,7 @@ export default async function OrderPage({ params }: OrderPageProps) {
           </Link>
         </div>
 
-        <OrderStatusClient orderId={params.id} initialOrder={initialOrder} />
+        <OrderStatusClient orderId={canonicalOrderCode} initialOrder={initialOrder} />
       </main>
       <Footer />
     </div>

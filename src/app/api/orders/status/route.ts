@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
+import { checkRateLimit } from "@/lib/rateLimit";
+
 export const revalidate = 0;
 
 function getServiceClient() {
@@ -12,36 +14,62 @@ function getServiceClient() {
   });
 }
 
+function maskWaNumber(wa: string | null | undefined): string | null {
+  if (!wa) return null;
+  const clean = wa.replace(/[^\d]/g, "");
+  if (clean.length < 8) return "0819****1190";
+  return `${clean.slice(0, 4)}****${clean.slice(-4)}`;
+}
+
+function maskAddress(address: string | null | undefined): string | null {
+  if (!address) return null;
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+  }
+  return address;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const code = searchParams.get("code") || searchParams.get("id");
+    const codeParam = searchParams.get("code") || searchParams.get("id");
+    const queryCode = (codeParam || "").trim();
 
-    if (!code || !code.trim()) {
-      return NextResponse.json({ error: "Parameter kode pesanan wajib diisi" }, { status: 400 });
+    // Protection: Public status endpoint ONLY accepts string order_code (e.g. ORD-xxxxx). Numeric integer sequential IDs are strictly rejected.
+    const isNumericInteger = /^\d+$/.test(queryCode);
+    if (!queryCode || isNumericInteger) {
+      return NextResponse.json(
+        { error: "Pencarian pesanan publik hanya diizinkan menggunakan Kode Pesanan (Order Code) resmi" },
+        { status: 400 }
+      );
+    }
+
+    // Layer 1 Rate Limit: IP Global Guard (Max 200 requests/60s across all order_codes from this IP)
+    const globalLimit = checkRateLimit(request, 200, 60 * 1000, "global_orders_status");
+    if (!globalLimit.success) {
+      return globalLimit.response!;
+    }
+
+    // Layer 2 Rate Limit: Composite Key Guard (Max 60 requests/60s per order_code from this IP)
+    const orderLimit = checkRateLimit(request, 60, 60 * 1000, `order_status:${queryCode}`);
+    if (!orderLimit.success) {
+      return orderLimit.response!;
     }
 
     const serviceClient = getServiceClient();
-    const queryCode = code.trim();
 
-    // 1. Query new 'orders' table with JOIN customers, order_items, payment_proofs
-    let orderQuery = serviceClient
+    // 1. Query new 'orders' table with JOIN customers, order_items, payment_proofs strictly by order_code
+    const { data: orders, error: orderErr } = await serviceClient
       .from("orders")
       .select(`
         *,
         customer:customers(*),
         order_items(*),
         payment_proofs(*)
-      `);
-
-    const numericId = parseInt(queryCode, 10);
-    if (!isNaN(numericId) && numericId > 0 && String(numericId) === queryCode) {
-      orderQuery = orderQuery.or(`id.eq.${numericId},order_code.eq.${queryCode}`);
-    } else {
-      orderQuery = orderQuery.or(`order_code.eq.${queryCode},order_code.ilike.%${queryCode}%`);
-    }
-
-    const { data: orders, error: orderErr } = await orderQuery.limit(1);
+      `)
+      .eq("order_code", queryCode)
+      .limit(1);
 
     if (!orderErr && orders && orders.length > 0) {
       const order = orders[0];
@@ -63,11 +91,10 @@ export async function GET(request: NextRequest) {
         success: true,
         source: "orders",
         data: {
-          id: order.id,
           order_code: order.order_code,
           customer_name: order.customer?.name || null,
-          customer_wa: order.customer?.wa_number || null,
-          customer_address: order.customer?.address || null,
+          customer_wa: maskWaNumber(order.customer?.wa_number),
+          customer_address: maskAddress(order.customer?.address),
           order_notes: order.order_notes,
           payment_method: order.payment_method,
           payment_status: order.payment_status,
@@ -87,22 +114,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 2. Fallback Hibrid: Query historical 'order_intents' table
-    let fallbackQuery = serviceClient.from("order_intents").select("*");
-    if (!isNaN(numericId) && numericId > 0 && String(numericId) === queryCode) {
-      fallbackQuery = fallbackQuery.or(`id.eq.${numericId},order_code.eq.${queryCode}`);
-    } else {
-      fallbackQuery = fallbackQuery.or(`order_code.eq.${queryCode},id.eq.${queryCode},items_json.ilike.%${queryCode}%`);
-    }
-
-    const { data: intents, error: intentErr } = await fallbackQuery.limit(1);
+    // 2. Fallback Hibrid: Query historical 'order_intents' table strictly by order_code
+    const { data: intents, error: intentErr } = await serviceClient
+      .from("order_intents")
+      .select("*")
+      .eq("order_code", queryCode)
+      .limit(1);
 
     if (!intentErr && intents && intents.length > 0) {
       const intent = intents[0];
+      const { id: _legacyId, ...safeIntent } = intent;
       return NextResponse.json({
         success: true,
         source: "order_intents",
-        data: intent
+        data: {
+          ...safeIntent,
+          customer_wa: maskWaNumber(intent.customer_wa),
+          customer_address: maskAddress(intent.customer_address),
+        }
       });
     }
 

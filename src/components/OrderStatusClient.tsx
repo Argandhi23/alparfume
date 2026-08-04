@@ -265,7 +265,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
 
   // Order Tracking Status Calculation from top-level & items_json fields
   const localFulfill = isMounted && typeof window !== "undefined"
-    ? (localStorage.getItem(`alparfume_intent_fulfill_${orderId}`) || (order?.id ? localStorage.getItem(`alparfume_intent_fulfill_${order.id}`) : "") || "").toLowerCase()
+    ? (localStorage.getItem(`alparfume_intent_fulfill_${orderId}`) || (order?.order_code ? localStorage.getItem(`alparfume_intent_fulfill_${order.order_code}`) : "") || "").toLowerCase()
     : "";
 
   const rawTopFulfill = String(order?.fulfillment_status || "").toLowerCase();
@@ -381,7 +381,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     );
   };
 
-  const formattedCode = order?.order_code || (order?.id ? String(order.id).substring(0, 8).toUpperCase() : orderId.substring(0, 8).toUpperCase());
+  const formattedCode = order?.order_code || orderId;
 
   // Parse items array from items_json or single product fallback
   let itemsList: { productName: string; sizeMl: number; quantity: number; price: number; totalItemPrice: number }[] = [];

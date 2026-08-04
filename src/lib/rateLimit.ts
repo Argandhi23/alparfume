@@ -22,22 +22,26 @@ setInterval(() => {
  * @param request NextRequest
  * @param maxRequests Maximum requests allowed within window
  * @param windowMs Window duration in milliseconds
+ * @param customKey Optional custom identifier/prefix for composite key rate limiting (e.g. order_code)
  */
 export function checkRateLimit(
   request: NextRequest,
   maxRequests: number = 15,
-  windowMs: number = 60 * 1000
+  windowMs: number = 60 * 1000,
+  customKey?: string
 ): { success: boolean; response?: NextResponse } {
   // Extract client IP address
   const forwardedFor = request.headers.get("x-forwarded-for");
   const realIp = request.headers.get("x-real-ip");
   const ip = (forwardedFor ? forwardedFor.split(",")[0] : realIp) || "127.0.0.1";
 
+  const storeKey = customKey ? `${ip}:${customKey}` : ip;
+
   const now = Date.now();
-  const record = ipStore.get(ip);
+  const record = ipStore.get(storeKey);
 
   if (!record || now > record.resetTime) {
-    ipStore.set(ip, {
+    ipStore.set(storeKey, {
       count: 1,
       resetTime: now + windowMs,
     });
