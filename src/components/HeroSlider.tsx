@@ -147,7 +147,7 @@ export default function HeroSlider({ banners = [] }: HeroSliderProps) {
             transform: `translateX(calc(-${currentSlide * 100}% + ${dragOffset}px))` 
           }}
         >
-          {slides.map((slide) => {
+          {slides.map((slide, index) => {
             const hasImage = "image_url" in slide && slide.image_url;
 
             return (
@@ -162,7 +162,7 @@ export default function HeroSlider({ banners = [] }: HeroSliderProps) {
                     src={slide.image_url as string}
                     alt={("title" in slide && slide.title) || "Banner Promo"}
                     fill
-                    priority
+                    priority={index === 0}
                     className="object-cover w-full h-full pointer-events-none"
                   />
                 ) : (
