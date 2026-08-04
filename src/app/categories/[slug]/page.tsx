@@ -11,9 +11,9 @@ import { Suspense } from "react";
 export const revalidate = 60;
 
 interface CategoryPageProps {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 }
 
 const getCategoryData = cache(async (slug: string) => {
@@ -54,8 +54,9 @@ const getCategoryData = cache(async (slug: string) => {
 });
 
 export async function generateMetadata({ params }: CategoryPageProps) {
-  const { category } = await getCategoryData(params.slug);
-  const titleName = category ? category.name : params.slug;
+  const { slug } = await params;
+  const { category } = await getCategoryData(slug);
+  const titleName = category ? category.name : slug;
 
   return {
     title: `Kategori ${titleName} | Al Parfume`,
@@ -64,7 +65,8 @@ export async function generateMetadata({ params }: CategoryPageProps) {
 }
 
 export default async function CategoryPage({ params }: CategoryPageProps) {
-  const { category, products } = await getCategoryData(params.slug);
+  const { slug } = await params;
+  const { category, products } = await getCategoryData(slug);
 
   if (!category) {
     notFound();

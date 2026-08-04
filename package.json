@@ -11,9 +11,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",
     "lucide-react": "^1.18.0",
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18"
+    "next": "^15.5.22",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@types/node": "^20",

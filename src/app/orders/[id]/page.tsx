@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 interface OrderPageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 async function getOrderDetails(id: string): Promise<OrderIntent | null> {
@@ -122,15 +122,17 @@ function maskAddress(address: string | null | undefined): string | null {
 }
 
 export async function generateMetadata({ params }: OrderPageProps) {
+  const { id } = await params;
   return {
-    title: `Pesanan #${params.id} | Al Parfume`,
-    description: `Cek status pembayaran QRIS dan Nomor Resi pengiriman pesanan #${params.id}.`,
+    title: `Pesanan #${id} | Al Parfume`,
+    description: `Cek status pembayaran QRIS dan Nomor Resi pengiriman pesanan #${id}.`,
   };
 }
 
 export default async function OrderPage({ params }: OrderPageProps) {
-  const initialOrder = await getOrderDetails(params.id);
-  const canonicalOrderCode = initialOrder?.order_code || params.id;
+  const { id } = await params;
+  const initialOrder = await getOrderDetails(id);
+  const canonicalOrderCode = initialOrder?.order_code || id;
 
   if (initialOrder) {
     initialOrder.customer_wa = maskWaNumber(initialOrder.customer_wa);

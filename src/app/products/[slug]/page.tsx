@@ -11,9 +11,9 @@ import { notFound } from "next/navigation";
 export const revalidate = 60;
 
 interface ProductPageProps {
-  params: {
+  params: Promise<{
     slug: string;
-  };
+  }>;
 }
 
 const getProductDetails = cache(async (slug: string) => {
@@ -37,7 +37,8 @@ const getProductDetails = cache(async (slug: string) => {
 });
 
 export async function generateMetadata({ params }: ProductPageProps) {
-  const product = await getProductDetails(params.slug);
+  const { slug } = await params;
+  const product = await getProductDetails(slug);
   
   if (!product) {
     return {
@@ -94,7 +95,8 @@ export async function generateMetadata({ params }: ProductPageProps) {
 }
 
 export default async function ProductPage({ params }: ProductPageProps) {
-  const product = await getProductDetails(params.slug);
+  const { slug } = await params;
+  const product = await getProductDetails(slug);
 
   if (!product) {
     notFound();
