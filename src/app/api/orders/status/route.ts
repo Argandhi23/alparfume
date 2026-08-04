@@ -123,7 +123,8 @@ export async function GET(request: NextRequest) {
 
     if (!intentErr && intents && intents.length > 0) {
       const intent = intents[0];
-      const { id: _legacyId, ...safeIntent } = intent;
+      const safeIntent = { ...intent };
+      delete (safeIntent as { id?: unknown }).id;
       return NextResponse.json({
         success: true,
         source: "order_intents",
