@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const codeParam = searchParams.get("code") || searchParams.get("id");
-    const queryCode = (codeParam || "").trim();
+    const queryCode = (codeParam || "").trim().toUpperCase();
 
     // Protection: Public status endpoint ONLY accepts string order_code (e.g. ORD-xxxxx). Numeric integer sequential IDs are strictly rejected.
     const isNumericInteger = /^\d+$/.test(queryCode);

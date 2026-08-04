@@ -24,7 +24,7 @@ async function getOrderDetails(id: string): Promise<OrderIntent | null> {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    const queryCode = id.trim();
+    const queryCode = id.trim().toUpperCase();
 
     // 1. Check new 'orders' table first
     let orderQuery = serviceClient
@@ -37,10 +37,10 @@ async function getOrderDetails(id: string): Promise<OrderIntent | null> {
       `);
 
     const numericId = parseInt(queryCode, 10);
-    if (!isNaN(numericId) && numericId > 0 && String(numericId) === queryCode) {
+    if (!isNaN(numericId) && numericId > 0 && String(numericId) === id.trim()) {
       orderQuery = orderQuery.or(`id.eq.${numericId},order_code.eq.${queryCode}`);
     } else {
-      orderQuery = orderQuery.or(`order_code.eq.${queryCode},order_code.ilike.%${queryCode}%`);
+      orderQuery = orderQuery.eq("order_code", queryCode);
     }
 
     const { data: orders } = await orderQuery.limit(1);
@@ -80,17 +80,16 @@ async function getOrderDetails(id: string): Promise<OrderIntent | null> {
         payment_proof_url: latestProofUrl,
         items_json: JSON.stringify({ items: itemsList }),
         created_at: order.created_at,
-        product_name: itemsList.length > 0 ? itemsList[0].productName : "Pesanan Parfum",
-        size_ml: itemsList.length > 0 ? itemsList[0].sizeMl : 35,
+        items: itemsList
       } as unknown as OrderIntent;
     }
 
     // 2. Fallback Hibrid: Check historical 'order_intents' table
     let fallbackQuery = serviceClient.from("order_intents").select("*");
-    if (!isNaN(numericId) && numericId > 0 && String(numericId) === queryCode) {
+    if (!isNaN(numericId) && numericId > 0 && String(numericId) === id.trim()) {
       fallbackQuery = fallbackQuery.or(`id.eq.${numericId},order_code.eq.${queryCode}`);
     } else {
-      fallbackQuery = fallbackQuery.or(`order_code.eq.${queryCode},id.eq.${queryCode},items_json.ilike.%${queryCode}%`);
+      fallbackQuery = fallbackQuery.eq("order_code", queryCode);
     }
 
     const { data: intents } = await fallbackQuery.limit(1);

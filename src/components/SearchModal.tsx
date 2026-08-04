@@ -11,13 +11,16 @@ interface SearchModalProps {
   onClose: () => void;
 }
 
+// Module-level in-memory cache for search products within browser session
+let searchProductsCache: ProductWithVariants[] | null = null;
+
 export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   const [query, setQuery] = useState("");
-  const [products, setProducts] = useState<ProductWithVariants[]>([]);
+  const [products, setProducts] = useState<ProductWithVariants[]>(searchProductsCache || []);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch all active products (including sold-out items) on modal open
+  // Fetch active products on modal open (cached after first fetch in session)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -27,16 +30,23 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
     }, 80);
 
     const fetchProducts = async () => {
+      if (searchProductsCache && searchProductsCache.length > 0) {
+        setProducts(searchProductsCache);
+        return;
+      }
+
       setLoading(true);
       try {
         const { data: prodData } = await supabase
           .from("products")
-          .select("*, product_variants(*)")
+          .select("id, name, slug, description, notes, top_notes, middle_notes, bottom_notes, image_url, is_sold_out, stock, product_variants(id, product_id, size_ml, price)")
           .eq("is_active", true)
           .order("name", { ascending: true });
 
         if (prodData) {
-          setProducts(prodData as ProductWithVariants[]);
+          const list = prodData as unknown as ProductWithVariants[];
+          searchProductsCache = list;
+          setProducts(list);
         }
       } catch (err) {
         console.error("Search fetch products error:", err);
