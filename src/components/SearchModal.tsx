@@ -37,13 +37,15 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
       setLoading(true);
       try {
-        const { data: prodData } = await supabase
+        const { data: prodData, error } = await supabase
           .from("products")
-          .select("id, name, slug, description, notes, top_notes, middle_notes, bottom_notes, image_url, is_sold_out, stock, product_variants(id, product_id, size_ml, price)")
+          .select("id, name, slug, description, notes, image_url, is_sold_out, stock, product_variants(id, product_id, size_ml, price)")
           .eq("is_active", true)
           .order("name", { ascending: true });
 
-        if (prodData) {
+        if (error) {
+          console.error("Search fetch products Supabase error:", error);
+        } else if (prodData) {
           const list = prodData as unknown as ProductWithVariants[];
           searchProductsCache = list;
           setProducts(list);
@@ -84,6 +86,25 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
   if (!isOpen) return null;
 
+  // Helper to extract clean notes text from either JSON string or plain text
+  const extractNotesText = (notesStr: string | null | undefined): string => {
+    if (!notesStr) return "";
+    if (notesStr.startsWith("{")) {
+      try {
+        const parsed = JSON.parse(notesStr);
+        if (parsed && typeof parsed === "object") {
+          const top = typeof parsed.top === "string" ? parsed.top : "";
+          const middle = typeof parsed.middle === "string" ? parsed.middle : "";
+          const bottom = typeof parsed.bottom === "string" ? parsed.bottom : "";
+          return `${top} ${middle} ${bottom}`.toLowerCase();
+        }
+      } catch {
+        // Fallback to raw string if JSON parsing fails
+      }
+    }
+    return notesStr.toLowerCase();
+  };
+
   // Case-insensitive & space-normalized matching
   const normalizedQuery = query.toLowerCase().trim();
 
@@ -97,18 +118,11 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
 
         const nameLower = (product.name || "").toLowerCase();
         const descLower = (product.description || "").toLowerCase();
-        const notesLower = (product.notes || "").toLowerCase();
-        const topNotesLower = (product.top_notes || "").toLowerCase();
-        const middleNotesLower = (product.middle_notes || "").toLowerCase();
-        const bottomNotesLower = (product.bottom_notes || "").toLowerCase();
+        const notesText = extractNotesText(product.notes);
 
         const nameMatch = nameLower.includes(normalizedQuery);
         const descMatch = descLower.includes(normalizedQuery);
-        const notesMatch =
-          notesLower.includes(normalizedQuery) ||
-          topNotesLower.includes(normalizedQuery) ||
-          middleNotesLower.includes(normalizedQuery) ||
-          bottomNotesLower.includes(normalizedQuery);
+        const notesMatch = notesText.includes(normalizedQuery);
 
         const variantMatch = variantsList.some(
           (v) =>
