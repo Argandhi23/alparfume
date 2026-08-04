@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_KEY = process.env.RAJAONGKIR_API_KEY || "04e38c5b1695edddc8810e75a3668875";
+const API_KEY = process.env.RAJAONGKIR_API_KEY || "";
 const RAJAONGKIR_BASE = "https://api.rajaongkir.com/starter";
 
 interface EmsifaItem {
@@ -68,28 +68,32 @@ export async function GET(request: Request) {
     // 1. PROVINCES
     // -------------------------------------------------------------
     if (type === "provinces") {
-      // Level 1: Try RajaOngkir with strict 2.5s timeout
-      try {
-        const res = await fetch(`${RAJAONGKIR_BASE}/province`, {
-          headers: { key: API_KEY },
-          signal: AbortSignal.timeout(2500),
-          next: { revalidate: 86400 }
-        });
-        if (res.ok) {
-          const data = await res.json();
-          const results = data?.rajaongkir?.results;
-          if (Array.isArray(results) && results.length > 0) {
-            const formatted = results.map((p: { province_id: string; province: string }) => ({
-              province_id: String(p.province_id),
-              province: p.province,
-              id: String(p.province_id),
-              name: p.province
-            }));
-            return NextResponse.json(formatted);
+      // Level 1: Try RajaOngkir with strict 2.5s timeout if API_KEY is present
+      if (!API_KEY) {
+        console.warn("Shipping Regions API: RAJAONGKIR_API_KEY is missing. Skipping RajaOngkir and falling back to EMSIFA/Local Dataset.");
+      } else {
+        try {
+          const res = await fetch(`${RAJAONGKIR_BASE}/province`, {
+            headers: { key: API_KEY },
+            signal: AbortSignal.timeout(2500),
+            next: { revalidate: 86400 }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const results = data?.rajaongkir?.results;
+            if (Array.isArray(results) && results.length > 0) {
+              const formatted = results.map((p: { province_id: string; province: string }) => ({
+                province_id: String(p.province_id),
+                province: p.province,
+                id: String(p.province_id),
+                name: p.province
+              }));
+              return NextResponse.json(formatted);
+            }
           }
+        } catch {
+          // RajaOngkir failed or timed out, fallback to EMSIFA
         }
-      } catch {
-        // RajaOngkir failed or timed out, fallback to EMSIFA
       }
 
       // Level 2: Try EMSIFA API

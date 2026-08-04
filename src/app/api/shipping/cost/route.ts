@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const API_KEY = process.env.RAJAONGKIR_API_KEY || process.env.BINDERBYTE_API_KEY || "aHnSiM306e29d93e911fb214zsbMcmun";
+const API_KEY = process.env.RAJAONGKIR_API_KEY || process.env.BINDERBYTE_API_KEY || "";
 const KOMERCE_BASE = "https://rajaongkir.komerce.id/api/v1";
 
 // Alparfume Default Origin: Genteng, Surabaya City (Komerce Destination ID: 69237)
@@ -45,6 +45,10 @@ export async function POST(request: Request) {
 
     let destinationId: number | null = null;
     let matchedDestinationLabel = "";
+
+    if (!API_KEY) {
+      console.warn("Shipping Cost API: RAJAONGKIR_API_KEY / BINDERBYTE_API_KEY is missing. Falling back to internal tariff engine.");
+    }
 
     // 1. SEARCH DESTINATION ID VIA KOMERCE API
     if (API_KEY && searchQueries.length > 0) {
