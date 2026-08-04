@@ -1,15 +1,15 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, ProductWithVariants } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import HomePageClient from "@/components/HomePageClient";
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 async function getProducts() {
   try {
     const { data, error } = await supabase
       .from("products")
-      .select("*, product_variants(*)")
+      .select("id, name, slug, description, notes, image_url, category_id, is_active, is_sold_out, is_low_stock, is_best_seller, stock, created_at, product_variants(id, product_id, size_ml, price, stock)")
       .eq("is_active", true)
       .order("is_sold_out", { ascending: true })
       .order("created_at", { ascending: false });
@@ -19,7 +19,7 @@ async function getProducts() {
       return [];
     }
 
-    return data || [];
+    return (data as unknown as ProductWithVariants[]) || [];
   } catch (err) {
     console.error("Unexpected error fetching products:", err);
     return [];

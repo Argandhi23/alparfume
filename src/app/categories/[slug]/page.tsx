@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabase, ProductWithVariants } from "@/lib/supabase";
 import ProductGrid, { ProductGridSkeleton } from "@/components/ProductGrid";
 import Navbar from "@/components/Navbar";
@@ -7,8 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60;
 
 interface CategoryPageProps {
   params: {
@@ -16,7 +16,7 @@ interface CategoryPageProps {
   };
 }
 
-async function getCategoryData(slug: string) {
+const getCategoryData = cache(async (slug: string) => {
   try {
     // 1. Fetch category by slug
     const { data: category } = await supabase
@@ -51,7 +51,7 @@ async function getCategoryData(slug: string) {
     console.error("Error fetching category page data:", err);
     return { category: null, products: [] };
   }
-}
+});
 
 export async function generateMetadata({ params }: CategoryPageProps) {
   const { category } = await getCategoryData(params.slug);

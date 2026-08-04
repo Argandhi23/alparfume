@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { supabase } from "@/lib/supabase";
 import ProductDetailsClient from "@/components/ProductDetailsClient";
 import ProductImageCarousel from "@/components/ProductImageCarousel";
@@ -7,7 +8,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 
-export const revalidate = 0;
+export const revalidate = 60;
 
 interface ProductPageProps {
   params: {
@@ -15,7 +16,7 @@ interface ProductPageProps {
   };
 }
 
-async function getProductDetails(slug: string) {
+const getProductDetails = cache(async (slug: string) => {
   try {
     const { data, error } = await supabase
       .from("products")
@@ -33,7 +34,7 @@ async function getProductDetails(slug: string) {
     console.error("Error retrieving product details:", err);
     return null;
   }
-}
+});
 
 export async function generateMetadata({ params }: ProductPageProps) {
   const product = await getProductDetails(params.slug);

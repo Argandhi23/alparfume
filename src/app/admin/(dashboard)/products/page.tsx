@@ -532,6 +532,22 @@ export default function ProductsPage() {
         }
       }
 
+      const getAuthHeader = async (): Promise<Record<string, string>> => {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        } catch {
+          return {};
+        }
+      };
+      const authHeader = await getAuthHeader();
+
+      fetch("/api/admin/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeader },
+        body: JSON.stringify({ slug: formSlug.trim() }),
+      }).catch(() => {});
+
       setIsModalOpen(false);
       fetchData();
     } catch (err: unknown) {
@@ -573,6 +589,18 @@ export default function ProductsPage() {
       await supabase.from("product_variants").delete().eq("product_id", deleteTargetId);
       await supabase.from("products").delete().eq("id", deleteTargetId);
 
+      if (targetProduct?.slug) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          const authHeader: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+          fetch("/api/admin/revalidate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeader },
+            body: JSON.stringify({ slug: targetProduct.slug }),
+          }).catch(() => {});
+        } catch {}
+      }
+
       setDeleteTargetId(null);
       fetchData();
     } catch (err) {
@@ -590,6 +618,15 @@ export default function ProductsPage() {
         .eq("id", product.id);
 
       if (error) throw error;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const authHeader: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        fetch("/api/admin/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeader },
+          body: JSON.stringify({ slug: product.slug }),
+        }).catch(() => {});
+      } catch {}
       fetchData();
     } catch (err) {
       console.error("Gagal mengubah status aktif produk:", err);
@@ -604,6 +641,15 @@ export default function ProductsPage() {
         .eq("id", product.id);
 
       if (error) throw error;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const authHeader: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        fetch("/api/admin/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeader },
+          body: JSON.stringify({ slug: product.slug }),
+        }).catch(() => {});
+      } catch {}
       fetchData();
     } catch (err) {
       console.error("Gagal mengubah status sold out produk:", err);
@@ -618,6 +664,15 @@ export default function ProductsPage() {
         .eq("id", product.id);
 
       if (error) throw error;
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const authHeader: Record<string, string> = session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+        fetch("/api/admin/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeader },
+          body: JSON.stringify({ slug: product.slug }),
+        }).catch(() => {});
+      } catch {}
       fetchData();
     } catch (err) {
       console.error("Gagal mengubah status Best Seller produk:", err);
