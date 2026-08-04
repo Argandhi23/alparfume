@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase, OrderIntent } from "@/lib/supabase";
 import { 
   CheckCircle2, Clock, Truck, Store, Copy, Upload, Loader2, MapPin, 
-  PackageCheck, Package, Check, ZoomIn, X, AlertCircle
+  PackageCheck, Package, Check, ZoomIn, X, AlertCircle, ExternalLink
 } from "lucide-react";
 import Image from "next/image";
 
@@ -245,6 +245,10 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const deliveryMethodLower = (order?.delivery_method || String(itemsMeta.delivery_method || "")).toLowerCase();
   const itemsJsonStr = (order?.items_json || "").toLowerCase();
 
+  const isQris =
+    paymentMethodLower === "qris" ||
+    itemsJsonStr.includes('"payment_method":"qris"');
+
   const isPickup =
     deliveryMethodLower === "pickup" ||
     paymentMethodLower === "cod_pickup" ||
@@ -256,7 +260,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
     itemsJsonStr.includes('"delivery_method":"pickup"');
 
   const isCodCourier =
-    !isPickup && (
+    !isPickup && !isQris && (
       paymentMethodLower === "cod" ||
       paymentMethodLower === "cod_courier" ||
       itemsJsonStr.includes('"payment_method":"cod"') ||
@@ -330,7 +334,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       }
       return (
         <span className="bg-white text-black font-semibold px-3.5 py-1.5 rounded-full text-[10px] uppercase tracking-widest border border-black flex items-center gap-1.5">
-          <Store className="w-3.5 h-3.5" /> Ambil di Toko (COD)
+          <Store className="w-3.5 h-3.5" /> Ambil di Toko ({isQris ? "QRIS" : "COD"})
         </span>
       );
     }
@@ -414,6 +418,36 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const shippingCost = Number(itemsMeta.shipping_cost || order?.shipping_cost || 0);
   const grandTotal = Number(itemsMeta.grand_total || order?.total_price || order?.price || (subtotal + shippingCost));
 
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent("Store AL Parfume, Jl. Teratai No. 45, Madiun, Jawa Timur")}`;
+
+  const renderPickupStoreCard = () => (
+    <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-4">
+      <div className="flex items-center gap-2 text-brandBlack font-bold text-sm uppercase tracking-wider border-b pb-3">
+        <Store className="w-4 h-4 text-emerald-600" /> Lokasi Ambil di Toko
+      </div>
+      <p className="text-xs text-neutral-600 leading-relaxed font-sans">
+        Silakan tunjukkan Kode Pesanan <span className="font-bold font-mono">#{formattedCode}</span> ke kasir toko saat mengambil parfum.
+      </p>
+      <a
+        href={googleMapsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="group block bg-neutral-50 hover:bg-neutral-100 p-4 rounded-xl border border-neutral-200 hover:border-black/30 transition-all text-xs space-y-2 font-sans cursor-pointer"
+      >
+        <div className="font-semibold text-brandBlack group-hover:text-black flex items-center justify-between gap-1.5">
+          <span className="flex items-center gap-1.5">
+            <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
+            Store AL Parfume Madiun
+          </span>
+          <ExternalLink className="w-3.5 h-3.5 text-neutral-400 group-hover:text-black transition-colors shrink-0" />
+        </div>
+        <p className="text-neutral-500 group-hover:text-neutral-700 text-[11px] leading-snug pl-5 underline underline-offset-2 decoration-neutral-300 group-hover:decoration-neutral-600">
+          Jl. Teratai No. 45, Madiun, Jawa Timur (Buka Setiap Hari 09.00 - 21.00 WIB)
+        </p>
+      </a>
+    </div>
+  );
+
   return (
     <div className="space-y-8 font-sans">
       {/* Header Info */}
@@ -437,7 +471,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
           </div>
 
           {isPickup ? (
-            /* Workflow Ambil di Toko (COD Madiun) */
+            /* Workflow Ambil di Toko */
             <div className="grid grid-cols-3 gap-2 relative">
               <div className={`p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 1 ? "bg-black text-white border-black" : "bg-neutral-50 text-neutral-400 border-neutral-200"}`}>
                 <Package className="w-4 h-4 mx-auto" />
@@ -447,7 +481,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                 <Store className="w-4 h-4 mx-auto" />
                 <div className="text-[10px] font-bold uppercase tracking-wider">2. Siap Diambil</div>
               </div>
-              <div className={`p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 3 ? "bg-emerald-600 text-white border-emerald-600" : "bg-neutral-50 text-neutral-400 border-neutral-200"}`}>
+              <div className={`p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 3 ? "bg-emerald-600 text-white border-emerald-600" : "bg-neutral-50 text-neutral-400 border-emerald-600"}`}>
                 <CheckCircle2 className="w-4 h-4 mx-auto" />
                 <div className="text-[10px] font-bold uppercase tracking-wider">3. Selesai (Diambil)</div>
               </div>
@@ -467,7 +501,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                 <Truck className="w-4 h-4 mx-auto" />
                 <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">3. Dikirim</div>
               </div>
-              <div className={`p-2.5 sm:p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 4 ? "bg-emerald-600 text-white border-emerald-600" : "bg-neutral-50 text-neutral-400 border-neutral-200"}`}>
+              <div className={`p-2.5 sm:p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 4 ? "bg-emerald-600 text-white border-emerald-600" : "bg-neutral-50 text-neutral-400 border-emerald-600"}`}>
                 <CheckCircle2 className="w-4 h-4 mx-auto" />
                 <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">4. Selesai</div>
               </div>
@@ -487,7 +521,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                 <Truck className="w-4 h-4 mx-auto" />
                 <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">3. Dikirim</div>
               </div>
-              <div className={`p-2.5 sm:p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 4 ? "bg-emerald-600 text-white border-emerald-600" : "bg-neutral-50 text-neutral-400 border-neutral-200"}`}>
+              <div className={`p-2.5 sm:p-3 rounded-xl border text-center space-y-1 transition-all ${currentStep >= 4 ? "bg-emerald-600 text-white border-emerald-600" : "bg-neutral-50 text-neutral-400 border-emerald-600"}`}>
                 <CheckCircle2 className="w-4 h-4 mx-auto" />
                 <div className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">4. Selesai</div>
               </div>
@@ -526,24 +560,104 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {/* Left Column: QRIS & Upload (or Pickup Banner) */}
         <div className="md:col-span-1 space-y-6">
-          {isPickup ? (
-            <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-4">
-              <div className="flex items-center gap-2 text-brandBlack font-bold text-sm uppercase tracking-wider border-b pb-3">
-                <Store className="w-4 h-4 text-emerald-600" /> Lokasi Ambil di Toko
-              </div>
-              <p className="text-xs text-neutral-600 leading-relaxed font-sans">
-                Silakan tunjukkan Kode Pesanan <span className="font-bold font-mono">#{formattedCode}</span> ke kasir toko saat mengambil parfum.
-              </p>
-              <div className="bg-neutral-50 p-4 rounded-xl border text-xs space-y-2 font-sans">
-                <div className="font-semibold text-brandBlack flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-neutral-700 shrink-0" />
-                  Store AL Parfume Madiun
+          {isQris ? (
+            <>
+              {/* Regular QRIS Upload Box */}
+              <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-5">
+                <div className="border-b pb-3">
+                  <h3 className="font-bold text-sm uppercase tracking-wider text-brandBlack">
+                    Pembayaran QRIS
+                  </h3>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    Scan QRIS di bawah ini dengan E-Wallet/Mobile Banking Anda.
+                  </p>
                 </div>
-                <p className="text-neutral-500 text-[11px] leading-snug pl-5">
-                  Jl. Teratai No. 45, Madiun, Jawa Timur (Buka Setiap Hari 09.00 - 21.00 WIB)
-                </p>
+
+                {/* QRIS Image Code */}
+                <div className="relative group bg-neutral-50 p-4 border rounded-xl flex flex-col items-center justify-center">
+                  <Image
+                    src="/qris.jpg"
+                    alt="QRIS Al Parfume"
+                    width={200}
+                    height={200}
+                    className="rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                    onClick={() => setIsQrisZoomed(true)}
+                  />
+                  <button
+                    onClick={() => setIsQrisZoomed(true)}
+                    className="mt-2 text-[10px] text-neutral-500 hover:text-black font-semibold flex items-center gap-1 uppercase tracking-wider"
+                  >
+                    <ZoomIn className="w-3 h-3" /> Perbesar QRIS
+                  </button>
+                </div>
+
+                {/* Proof Image Upload Box */}
+                <div className="border-t pt-4 space-y-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-brandBlack block">
+                    Unggah Bukti Transfer
+                  </label>
+
+                  {proofUrl ? (
+                    <div className="space-y-3">
+                      <div className="relative border rounded-xl overflow-hidden group bg-neutral-100">
+                        <Image
+                          src={proofUrl}
+                          alt="Bukti Transfer"
+                          width={300}
+                          height={300}
+                          className="w-full h-48 object-cover"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
+                        <CheckCircle2 className="w-4 h-4 shrink-0" />
+                        Bukti transfer tersimpan & menunggu verifikasi admin.
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="border-2 border-dashed border-neutral-300 hover:border-black rounded-xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center bg-neutral-50/50">
+                        {uploadingProof ? (
+                          <Loader2 className="w-6 h-6 animate-spin text-neutral-600" />
+                        ) : (
+                          <Upload className="w-6 h-6 text-neutral-400" />
+                        )}
+                        <span className="text-xs font-semibold text-neutral-700">
+                          {uploadingProof ? "Mengompres & Mengunggah..." : "Pilih Foto Bukti Transfer"}
+                        </span>
+                        <span className="text-[10px] text-neutral-400">
+                          Format JPG, PNG (Otomatis Diompres)
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          disabled={uploadingProof}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  )}
+
+                  {uploadError && (
+                    <div className="text-xs text-red-600 font-medium bg-red-50 p-2.5 rounded-lg border border-red-200 flex items-center gap-1.5">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {uploadError}
+                    </div>
+                  )}
+                  {uploadSuccess && (
+                    <div className="text-xs text-emerald-600 font-medium bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 shrink-0" />
+                      Bukti pembayaran berhasil diunggah!
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+
+              {/* Store Pickup Card for Pickup+QRIS */}
+              {isPickup && renderPickupStoreCard()}
+            </>
+          ) : isPickup ? (
+            renderPickupStoreCard()
           ) : isCodCourier ? (
             <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-4">
               <div className="flex items-center gap-2 text-brandBlack font-bold text-sm uppercase tracking-wider border-b pb-3">
@@ -553,98 +667,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                 Pesanan Anda akan dikirim via Kurir. Mohon siapkan uang tunai sebesar <span className="font-bold text-brandBlack">{formatRupiah(grandTotal)}</span> saat kurir datang.
               </p>
             </div>
-          ) : (
-            /* Regular QRIS Upload Box */
-            <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-5">
-              <div className="border-b pb-3">
-                <h3 className="font-bold text-sm uppercase tracking-wider text-brandBlack">
-                  Pembayaran QRIS
-                </h3>
-                <p className="text-xs text-neutral-500 mt-1">
-                  Scan QRIS di bawah ini dengan E-Wallet/Mobile Banking Anda.
-                </p>
-              </div>
-
-              {/* QRIS Image Code */}
-              <div className="relative group bg-neutral-50 p-4 border rounded-xl flex flex-col items-center justify-center">
-                <Image
-                  src="/qris.png"
-                  alt="QRIS Al Parfume"
-                  width={200}
-                  height={200}
-                  className="rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
-                  onClick={() => setIsQrisZoomed(true)}
-                />
-                <button
-                  onClick={() => setIsQrisZoomed(true)}
-                  className="mt-2 text-[10px] text-neutral-500 hover:text-black font-semibold flex items-center gap-1 uppercase tracking-wider"
-                >
-                  <ZoomIn className="w-3 h-3" /> Perbesar QRIS
-                </button>
-              </div>
-
-              {/* Proof Image Upload Box */}
-              <div className="border-t pt-4 space-y-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-brandBlack block">
-                  Unggah Bukti Transfer
-                </label>
-
-                {proofUrl ? (
-                  <div className="space-y-3">
-                    <div className="relative border rounded-xl overflow-hidden group bg-neutral-100">
-                      <Image
-                        src={proofUrl}
-                        alt="Bukti Transfer"
-                        width={300}
-                        height={300}
-                        className="w-full h-48 object-cover"
-                      />
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
-                      <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      Bukti transfer tersimpan & menunggu verifikasi admin.
-                    </div>
-                  </div>
-                ) : (
-                  <div>
-                    <label className="border-2 border-dashed border-neutral-300 hover:border-black rounded-xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors text-center bg-neutral-50/50">
-                      {uploadingProof ? (
-                        <Loader2 className="w-6 h-6 animate-spin text-neutral-600" />
-                      ) : (
-                        <Upload className="w-6 h-6 text-neutral-400" />
-                      )}
-                      <span className="text-xs font-semibold text-neutral-700">
-                        {uploadingProof ? "Mengompres & Mengunggah..." : "Pilih Foto Bukti Transfer"}
-                      </span>
-                      <span className="text-[10px] text-neutral-400">
-                        Format JPG, PNG (Otomatis Diompres)
-                      </span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileUpload}
-                        disabled={uploadingProof}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                )}
-
-                {uploadError && (
-                  <div className="text-xs text-red-600 font-medium bg-red-50 p-2.5 rounded-lg border border-red-200 flex items-center gap-1.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    {uploadError}
-                  </div>
-                )}
-                {uploadSuccess && (
-                  <div className="text-xs text-emerald-600 font-medium bg-emerald-50 p-2.5 rounded-lg border border-emerald-200 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    Bukti pembayaran berhasil diunggah!
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          ) : null}
         </div>
 
         {/* Right Column: Order Items & Customer Details */}
@@ -733,7 +756,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               <p className="text-xs text-neutral-500 mt-1">Gunakan E-Wallet atau M-Banking</p>
             </div>
             <div className="bg-white p-2 border rounded-2xl flex justify-center">
-              <Image src="/qris.png" alt="QRIS Zoom" width={320} height={320} className="rounded-xl object-contain" />
+              <Image src="/qris.jpg" alt="QRIS Zoom" width={320} height={320} className="rounded-xl object-contain" />
             </div>
             <button
               onClick={() => setIsQrisZoomed(false)}
