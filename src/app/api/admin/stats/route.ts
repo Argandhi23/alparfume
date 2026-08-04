@@ -12,10 +12,16 @@ export async function GET(request: NextRequest) {
 
     const serviceClient = getServiceClient();
 
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+    const thirtyDaysAgoISOString = thirtyDaysAgo.toISOString();
+
     // 1. Fetch created_at and grand_total from new 'orders' table
     const { data: ordersData, error: ordersError } = await serviceClient
       .from("orders")
       .select("created_at, grand_total")
+      .gte("created_at", thirtyDaysAgoISOString)
       .order("created_at", { ascending: true });
 
     let data = ordersData;
@@ -25,6 +31,7 @@ export async function GET(request: NextRequest) {
       const fallbackResult = await serviceClient
         .from("order_intents")
         .select("created_at, price")
+        .gte("created_at", thirtyDaysAgoISOString)
         .order("created_at", { ascending: true });
 
       if (!fallbackResult.error && fallbackResult.data) {
