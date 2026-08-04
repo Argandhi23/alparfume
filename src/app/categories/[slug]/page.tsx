@@ -25,50 +25,27 @@ async function getCategoryData(slug: string) {
       .eq("slug", slug)
       .single();
 
-    // 2. Fetch active products
+    if (!category) {
+      return { category: null, products: [] };
+    }
+
+    // 2. Fetch active products strictly filtered by category_id in Supabase
     const { data: products, error: prodError } = await supabase
       .from("products")
       .select("*, product_variants(*)")
       .eq("is_active", true)
+      .eq("category_id", category.id)
       .order("is_sold_out", { ascending: true })
       .order("created_at", { ascending: false });
 
     if (prodError) {
-      console.error("Error fetching products:", prodError);
-      return { category: category || null, products: [] };
+      console.error("Error fetching category products:", prodError);
+      return { category, products: [] };
     }
 
-    const allProducts: ProductWithVariants[] = products || [];
-
-    // Filter products for this category
-    const categoryProducts = allProducts.filter((product) => {
-      // Direct category_id match
-      if (category && product.category_id === category.id) {
-        return true;
-      }
-
-      // Match by size / slug heuristics
-      const slugLower = slug.toLowerCase();
-
-      if (slugLower.includes("30")) {
-        return product.product_variants?.some((v) => v.size_ml === 30 || v.size_ml === 35);
-      }
-      if (slugLower.includes("50")) {
-        return product.product_variants?.some((v) => v.size_ml === 50);
-      }
-      if (slugLower.includes("100")) {
-        return product.product_variants?.some((v) => v.size_ml === 100);
-      }
-      if (slugLower.includes("sample")) {
-        return product.product_variants?.some((v) => v.size_ml <= 20);
-      }
-
-      return false;
-    });
-
     return {
-      category: category || { id: slug, name: slug.replace(/-/g, " ").toUpperCase(), slug },
-      products: categoryProducts,
+      category,
+      products: (products as ProductWithVariants[]) || [],
     };
   } catch (err) {
     console.error("Error fetching category page data:", err);

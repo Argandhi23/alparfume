@@ -20,9 +20,9 @@ const DEFAULT_SAMPLE_CATEGORY: Category = {
 const DEFAULT_CATEGORIES: Category[] = [
   DEFAULT_SAMPLE_CATEGORY,
   {
-    id: "variant-30ml",
-    name: "Variant 30 ml",
-    slug: "variant-30ml",
+    id: "variant-35ml",
+    name: "Variant 35 ml",
+    slug: "variant-35ml",
     image_url: null,
     bg_color: "bg-stone-300",
     sort_order: 2,

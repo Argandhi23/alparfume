@@ -383,7 +383,7 @@ export default function OrdersPage() {
     }
 
     if (sizeMl === 30 || sizeMl === 35) {
-      return { label: "30ml", tagClass: "bg-blue-50 text-blue-700 border-blue-200" };
+      return { label: "35ml", tagClass: "bg-blue-50 text-blue-700 border-blue-200" };
     }
     if (sizeMl === 50) {
       return { label: "50ml", tagClass: "bg-emerald-50 text-emerald-700 border-emerald-200" };
@@ -392,7 +392,7 @@ export default function OrdersPage() {
       return { label: "100ml", tagClass: "bg-amber-50 text-amber-800 border-amber-200" };
     }
 
-    return { label: sizeMl ? `${sizeMl}ml` : "30ml", tagClass: "bg-neutral-100 text-neutral-700 border-neutral-200" };
+    return { label: sizeMl ? `${sizeMl}ml` : "35ml", tagClass: "bg-neutral-100 text-neutral-700 border-neutral-200" };
   };
 
   const buildCustomerWaConfirmationMessage = (intent: OrderIntent): string => {
@@ -1091,6 +1091,8 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                   const effectivePaymentMethod = parsedMeta.paymentMethod || int.payment_method;
                   
                   const isPickup =
+                    int.delivery_method === "pickup" ||
+                    parsedMeta.delivery_method === "pickup" ||
                     effectivePaymentMethod === "cod_pickup" ||
                     int.payment_method === "cod_pickup" ||
                     int.courier_name === "Ambil di Toko" ||

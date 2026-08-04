@@ -347,7 +347,7 @@ export default function CategoriesPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="space-y-1">
             <h2 className="text-xl font-bold font-plus-jakarta text-neutral-900">Kategori Parfum</h2>
-            <p className="text-xs text-neutral-500 font-sans">Atur pengelompokan kategori (misal: 30ml, 50ml, 100ml, Sample)</p>
+            <p className="text-xs text-neutral-500 font-sans">Atur pengelompokan kategori (misal: 35ml, 50ml, 100ml, Sample)</p>
           </div>
           <button
             onClick={() => {

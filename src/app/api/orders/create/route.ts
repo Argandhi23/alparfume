@@ -63,14 +63,7 @@ export async function POST(request: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
-    // 1. Fetch DB products and variants to re-calculate prices securely on server
-    const { data: dbProducts } = await serviceClient
-      .from("products")
-      .select("*, product_variants(*)");
-
-    const productsList: ProductWithVariants[] = Array.isArray(dbProducts) ? dbProducts : [];
-
-    // Parse items metadata
+    // 1. Parse items metadata to extract product identifiers
     let parsedMeta: Record<string, unknown> = {};
     if (cleanPayload.items_json) {
       try {
@@ -98,11 +91,43 @@ export async function POST(request: NextRequest) {
         {
           productName: cleanPayload.product_name,
           productSlug: cleanPayload.product_slug || "",
-          sizeMl: cleanPayload.size_ml || (String(cleanPayload.product_name || "").toLowerCase().includes("sample") ? 10 : 30),
+          sizeMl: cleanPayload.size_ml || (String(cleanPayload.product_name || "").toLowerCase().includes("sample") ? 10 : 35),
           quantity: 1,
         },
       ];
     }
+
+    // Collect targeted product IDs, Slugs, and Names for optimized DB query
+    const targetSlugs = Array.from(new Set(
+      rawItems
+        .map((i) => String(i.productSlug || i.slug || i.product_slug || "").trim().toLowerCase())
+        .filter(Boolean)
+    ));
+    const targetIds = Array.from(new Set(
+      rawItems
+        .map((i) => String(i.productId || i.product_id || i.id || "").trim())
+        .filter(Boolean)
+    ));
+    const targetNames = Array.from(new Set(
+      rawItems
+        .map((i) => String(i.productName || i.name || i.product_name || "").trim())
+        .filter(Boolean)
+    ));
+
+    // Fetch ONLY relevant products & variants for price verification
+    let productsQuery = serviceClient.from("products").select("*, product_variants(*)");
+
+    if (targetIds.length > 0) {
+      productsQuery = productsQuery.in("id", targetIds);
+    } else if (targetSlugs.length > 0) {
+      productsQuery = productsQuery.in("slug", targetSlugs);
+    } else if (targetNames.length > 0) {
+      productsQuery = productsQuery.in("name", targetNames);
+    }
+
+    const { data: dbProducts } = await productsQuery;
+
+    const productsList: ProductWithVariants[] = Array.isArray(dbProducts) ? dbProducts : [];
 
     // 2. Server-Side Price Calculation per Item
     let serverSubtotal = 0;
@@ -110,7 +135,7 @@ export async function POST(request: NextRequest) {
       const itemSlug = String(item.productSlug || item.slug || "").trim().toLowerCase();
       const itemName = String(item.productName || item.name || cleanPayload.product_name || "").trim();
       const isSampleProduct = itemName.toLowerCase().includes("sample") || itemSlug.includes("sample");
-      const defaultSize = isSampleProduct ? 10 : 30;
+      const defaultSize = isSampleProduct ? 10 : 35;
       const rawSize = Number(item.sizeMl || item.size_ml);
       const itemSize = (isSampleProduct || (rawSize > 0 && rawSize <= 15)) ? 10 : (rawSize || defaultSize);
       const itemQty = Math.max(1, Math.floor(Number(item.quantity || item.qty) || 1));
