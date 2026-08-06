@@ -102,22 +102,14 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
               {product.category.name}
             </span>
           )}
-          {selectedVariant && (
-            <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-white dark:bg-white dark:text-black px-2.5 py-0.5 rounded-full">
-              {selectedVariant.size_ml} ml
-            </span>
-          )}
         </div>
         <h1 className="font-plus-jakarta text-3xl font-bold text-brandBlack leading-tight">
           {toTitleCase(product.name)}
         </h1>
         {selectedVariant && (
-          <div className="pt-2 flex items-baseline gap-2">
+          <div className="pt-2">
             <span className="text-2xl font-semibold text-brandBlack font-plus-jakarta block">
               {formatRupiah(selectedVariant.price)}
-            </span>
-            <span className="text-xs font-semibold text-neutral-500 font-sans">
-              / {selectedVariant.size_ml} ml
             </span>
           </div>
         )}
