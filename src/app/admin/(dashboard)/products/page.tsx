@@ -35,6 +35,7 @@ export default function ProductsPage() {
   const [formIsSoldOut, setFormIsSoldOut] = useState(false);
   const [formIsBestSeller, setFormIsBestSeller] = useState(false);
   const [formPrice, setFormPrice] = useState<number>(45000);
+  const [formSizeMl, setFormSizeMl] = useState<number>(30);
   const [formStock, setFormStock] = useState<number>(10);
 
   // Image Crop States
@@ -66,7 +67,7 @@ export default function ProductsPage() {
         );
         if (!hasSample) {
           catList.unshift({
-            id: "c1c1c1c1-c1c1-11ee-8656-0242ac130002",
+            id: "4ed0369c-e713-47d0-9e20-c267c05833c7",
             name: "Sample",
             slug: "sample",
             sort_order: 1,
@@ -331,6 +332,7 @@ export default function ProductsPage() {
     setFormDescription("");
     setFormCategoryId(categories[0]?.id || null);
     setFormPrice(45000);
+    setFormSizeMl(30);
     setFormTopNotes("");
     setFormMiddleNotes("");
     setFormBottomNotes("");
@@ -369,8 +371,11 @@ export default function ProductsPage() {
     setFormIsBestSeller(product.is_best_seller || false);
     setFormStock(product.stock !== undefined && product.stock !== null ? product.stock : 10);
 
-    const firstVarPrice = product.product_variants && product.product_variants[0] ? product.product_variants[0].price : 45000;
+    const firstVar = product.product_variants && product.product_variants[0];
+    const firstVarPrice = firstVar ? firstVar.price : 45000;
+    const firstVarSize = firstVar ? firstVar.size_ml : 30;
     setFormPrice(firstVarPrice);
+    setFormSizeMl(firstVarSize);
 
     let parsedImages: (string | null)[] = [null, null, null];
     if (product.image_url) {
@@ -458,7 +463,7 @@ export default function ProductsPage() {
         if (newProd) {
           const variantPayload = {
             product_id: newProd.id,
-            size_ml: 30,
+            size_ml: Number(formSizeMl) || 30,
             price: Number(formPrice) || 45000,
           };
           const { error: varErr } = await supabase.from("product_variants").insert([variantPayload]);
@@ -519,12 +524,15 @@ export default function ProductsPage() {
         if (existingVars && existingVars.length > 0) {
           await supabase
             .from("product_variants")
-            .update({ price: Number(formPrice) || 45000 })
+            .update({
+              price: Number(formPrice) || 45000,
+              size_ml: Number(formSizeMl) || 30,
+            })
             .eq("id", existingVars[0].id);
         } else {
           await supabase.from("product_variants").insert([{
             product_id: selectedProductId,
-            size_ml: 30,
+            size_ml: Number(formSizeMl) || 30,
             price: Number(formPrice) || 45000,
           }]);
         }
@@ -909,7 +917,7 @@ export default function ProductsPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-1.5">
                   <label className="block font-bold text-neutral-700 uppercase tracking-wider">Harga (Rp)</label>
                   <input
@@ -918,6 +926,19 @@ export default function ProductsPage() {
                     value={formPrice}
                     onChange={(e) => setFormPrice(Number(e.target.value))}
                     className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block font-bold text-neutral-700 uppercase tracking-wider">Ukuran (ml)</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={formSizeMl}
+                    onChange={(e) => setFormSizeMl(e.target.value === "" ? 30 : Number(e.target.value))}
+                    className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
+                    placeholder="Contoh: 30"
                   />
                 </div>
 

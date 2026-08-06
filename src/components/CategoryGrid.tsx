@@ -9,7 +9,7 @@ interface CategoryGridProps {
 }
 
 const DEFAULT_SAMPLE_CATEGORY: Category = {
-  id: "c1c1c1c1-c1c1-11ee-8656-0242ac130002",
+  id: "4ed0369c-e713-47d0-9e20-c267c05833c7",
   name: "Sample",
   slug: "sample",
   image_url: null,

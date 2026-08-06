@@ -30,13 +30,40 @@ const getCategoryData = cache(async (slug: string) => {
     }
 
     // 2. Fetch active products strictly filtered by category_id in Supabase
-    const { data: products, error: prodError } = await supabase
+    const { data: initialProducts, error: prodError } = await supabase
       .from("products")
       .select("*, product_variants(*)")
       .eq("is_active", true)
       .eq("category_id", category.id)
       .order("is_sold_out", { ascending: true })
       .order("created_at", { ascending: false });
+
+    let products: ProductWithVariants[] = (initialProducts as unknown as ProductWithVariants[]) || [];
+
+    // Fallback if no products found with explicit category_id
+    if (products.length === 0 && !prodError) {
+      const { data: allProds } = await supabase
+        .from("products")
+        .select("*, product_variants(*)")
+        .eq("is_active", true)
+        .order("is_sold_out", { ascending: true })
+        .order("created_at", { ascending: false });
+
+      if (allProds) {
+        const slugLower = category.slug.toLowerCase();
+        const nameLower = category.name.toLowerCase();
+        products = (allProds as unknown as ProductWithVariants[]).filter((p) => {
+          if (p.category_id === category.id) return true;
+          if (slugLower.includes("sample") || nameLower.includes("sample")) {
+            return p.name.toLowerCase().includes("sample") || p.product_variants?.some((v) => v.size_ml <= 20);
+          }
+          if (slugLower.includes("toilette") || nameLower.includes("toilette")) {
+            return p.product_variants?.some((v) => v.size_ml === 30);
+          }
+          return false;
+        });
+      }
+    }
 
     if (prodError) {
       console.error("Error fetching category products:", prodError);

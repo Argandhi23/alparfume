@@ -93,16 +93,31 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
     <div className="space-y-8 font-sans">
       {/* Product Info Header */}
       <div className="space-y-2">
-        <span className="text-xs text-[var(--text-muted)] font-medium tracking-wide font-sans block uppercase">
-          Al Parfume Collection
-        </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-[var(--text-muted)] font-medium tracking-wide font-sans block uppercase">
+            Al Parfume Collection
+          </span>
+          {product.category?.name && (
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2.5 py-0.5 rounded-full border border-neutral-200/60 dark:border-neutral-700">
+              {product.category.name}
+            </span>
+          )}
+          {selectedVariant && (
+            <span className="text-[10px] font-bold uppercase tracking-wider bg-black text-white dark:bg-white dark:text-black px-2.5 py-0.5 rounded-full">
+              {selectedVariant.size_ml} ml
+            </span>
+          )}
+        </div>
         <h1 className="font-plus-jakarta text-3xl font-bold text-brandBlack leading-tight">
           {toTitleCase(product.name)}
         </h1>
         {selectedVariant && (
-          <div className="pt-2">
+          <div className="pt-2 flex items-baseline gap-2">
             <span className="text-2xl font-semibold text-brandBlack font-plus-jakarta block">
               {formatRupiah(selectedVariant.price)}
+            </span>
+            <span className="text-xs font-semibold text-neutral-500 font-sans">
+              / {selectedVariant.size_ml} ml
             </span>
           </div>
         )}
