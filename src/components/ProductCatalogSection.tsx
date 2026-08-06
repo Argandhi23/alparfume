@@ -38,17 +38,11 @@ export default function ProductCatalogSection({
     const slugLower = selectedCategory.slug.toLowerCase();
     const nameLower = selectedCategory.name.toLowerCase();
 
-    if (slugLower.includes("30") || nameLower.includes("30")) {
-      return product.product_variants?.some((v) => v.size_ml === 30 || v.size_ml === 35);
-    }
-    if (slugLower.includes("50") || nameLower.includes("50")) {
-      return product.product_variants?.some((v) => v.size_ml === 50);
-    }
-    if (slugLower.includes("100") || nameLower.includes("100")) {
-      return product.product_variants?.some((v) => v.size_ml === 100);
+    if (slugLower.includes("toilette") || nameLower.includes("toilette")) {
+      return product.product_variants?.some((v) => v.size_ml === 30);
     }
     if (slugLower.includes("sample") || nameLower.includes("sample")) {
-      return product.product_variants?.some((v) => v.size_ml <= 20);
+      return product.product_variants?.some((v) => v.size_ml <= 20) || product.name.toLowerCase().includes("sample");
     }
 
     return true;

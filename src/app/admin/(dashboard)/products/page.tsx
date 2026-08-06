@@ -355,10 +355,8 @@ export default function ProductsPage() {
     if (!matchedCatId && product.product_variants && product.product_variants.length > 0 && categories.length > 0) {
       const firstSize = product.product_variants[0].size_ml;
       let matchedCat: Category | undefined;
-      if (firstSize === 30 || firstSize === 35) matchedCat = categories.find((c) => c.slug.includes("30") || c.name.includes("30"));
-      else if (firstSize === 50) matchedCat = categories.find((c) => c.slug.includes("50") || c.name.includes("50"));
-      else if (firstSize === 100) matchedCat = categories.find((c) => c.slug.includes("100") || c.name.includes("100"));
-      else if (firstSize <= 20) matchedCat = categories.find((c) => c.slug.includes("sample") || c.name.includes("sample"));
+      if (firstSize === 30) matchedCat = categories.find((c) => c.slug.includes("toilette") || c.name.toLowerCase().includes("toilette"));
+      else if (firstSize <= 20) matchedCat = categories.find((c) => c.slug.includes("sample") || c.name.toLowerCase().includes("sample"));
       if (matchedCat) matchedCatId = matchedCat.id;
     }
     setFormCategoryId(matchedCatId);
@@ -460,7 +458,7 @@ export default function ProductsPage() {
         if (newProd) {
           const variantPayload = {
             product_id: newProd.id,
-            size_ml: 35,
+            size_ml: 30,
             price: Number(formPrice) || 45000,
           };
           const { error: varErr } = await supabase.from("product_variants").insert([variantPayload]);
@@ -526,7 +524,7 @@ export default function ProductsPage() {
         } else {
           await supabase.from("product_variants").insert([{
             product_id: selectedProductId,
-            size_ml: 35,
+            size_ml: 30,
             price: Number(formPrice) || 45000,
           }]);
         }

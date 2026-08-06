@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
           items_json: JSON.stringify({ items: itemsList }),
           created_at: order.created_at,
           product_name: itemsList.length > 0 ? itemsList[0].productName : "Pesanan Parfum",
-          size_ml: itemsList.length > 0 ? itemsList[0].sizeMl : 35,
+          size_ml: itemsList.length > 0 ? itemsList[0].sizeMl : 30,
         };
       });
 

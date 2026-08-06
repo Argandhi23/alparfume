@@ -347,7 +347,7 @@ export default function CategoriesPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div className="space-y-1">
             <h2 className="text-xl font-bold font-plus-jakarta text-neutral-900">Kategori Parfum</h2>
-            <p className="text-xs text-neutral-500 font-sans">Atur pengelompokan kategori (misal: 35ml, 50ml, 100ml, Sample)</p>
+            <p className="text-xs text-neutral-500 font-sans">Atur pengelompokan kategori (misal: Sample, Eau de Toilette, Eau de Parfum, Extrait de Parfum)</p>
           </div>
           <button
             onClick={() => {
@@ -630,7 +630,7 @@ export default function CategoriesPage() {
                     }
                   }}
                   className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm"
-                  placeholder="Contoh: Variant 50ml"
+                  placeholder="Contoh: Eau de Parfum"
                 />
               </div>
 
@@ -641,7 +641,7 @@ export default function CategoriesPage() {
                   value={categoryFormSlug}
                   onChange={(e) => setCategoryFormSlug(e.target.value)}
                   className="w-full px-4 py-2.5 border border-neutral-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-black text-sm font-mono"
-                  placeholder="variant-50ml"
+                  placeholder="eau-de-parfum"
                 />
               </div>
 
