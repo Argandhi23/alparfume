@@ -1,34 +1,26 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatRupiah } from "@/lib/whatsapp";
 import { ProductWithVariants } from "@/lib/supabase";
+import { sanitizeImageUrl } from "@/lib/imageHelper";
 
 interface ProductCardProps {
   product: ProductWithVariants;
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
+  const [imgError, setImgError] = useState(false);
+
   const prices = product.product_variants?.map((v) => v.price) || [];
   const minPrice = prices.length > 0 ? Math.min(...prices) : null;
 
   const isSoldOut = product.is_sold_out || (product.stock !== undefined && product.stock !== null && product.stock <= 0);
   const isLowStock = !isSoldOut && (product.is_low_stock || (product.stock !== undefined && product.stock !== null && product.stock < 5));
 
-  let displayImage = "";
-  if (product.image_url) {
-    if (product.image_url.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(product.image_url);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          displayImage = parsed[0];
-        }
-      } catch {
-        displayImage = product.image_url;
-      }
-    } else {
-      displayImage = product.image_url;
-    }
-  }
+  const displayImage = sanitizeImageUrl(product.image_url);
 
   const toTitleCase = (str: string) => {
     return str
@@ -44,19 +36,21 @@ export default function ProductCard({ product }: ProductCardProps) {
       className="group flex flex-col h-full bg-brandWhite rounded-2xl overflow-hidden hover:-translate-y-1 hover:scale-[1.01] shadow-sm hover:shadow-lg transition-all duration-500 ease-out relative no-underline border border-brandBorder/40"
     >
       <div className="relative aspect-square w-full bg-[var(--background-secondary)] overflow-hidden">
-        {displayImage ? (
+        {displayImage && !imgError ? (
           <Image
             src={displayImage}
             alt={product.name}
             fill
             sizes="(max-width: 768px) 50vw, 33vw"
+            onError={() => setImgError(true)}
             className={`object-cover group-hover:scale-105 transition-transform duration-700 ease-out ${
               isSoldOut ? "opacity-50 grayscale-[30%]" : ""
             }`}
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-[var(--background-secondary)] text-[var(--text-muted)] text-xs uppercase tracking-widest font-light">
-            Belum ada foto
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-[var(--background-secondary)] text-[var(--text-muted)] text-xs uppercase tracking-widest font-light p-4 text-center">
+            <span className="font-semibold text-sm">AL PARFUME</span>
+            <span className="text-[10px] opacity-70 mt-1">Foto Tidak Tersedia</span>
           </div>
         )}
 

@@ -2,10 +2,87 @@
 
 import React from "react";
 import { X, Plus, Minus, Trash2 } from "lucide-react";
-import { useCart } from "@/context/CartContext";
+import { useCart, CartItem } from "@/context/CartContext";
 import { formatRupiah } from "@/lib/whatsapp";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { sanitizeImageUrl } from "@/lib/imageHelper";
+
+interface CartItemRowProps {
+  item: CartItem;
+  updateQuantity: (id: string, quantity: number) => void;
+  removeFromCart: (id: string) => void;
+}
+
+function CartItemRow({ item, updateQuantity, removeFromCart }: CartItemRowProps) {
+  const [imgError, setImgError] = React.useState(false);
+  const imgUrl = sanitizeImageUrl(item.imageUrl);
+
+  const toTitleCase = (str: string) => {
+    return str
+      .toLowerCase()
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  };
+
+  return (
+    <div className="flex gap-4 border-b border-brandBorder pb-6 last:border-0 last:pb-0">
+      <div className="relative w-20 h-20 bg-brandGray border border-brandBorder flex-shrink-0 rounded-lg overflow-hidden flex items-center justify-center">
+        {imgUrl && !imgError ? (
+          <Image
+            src={imgUrl}
+            alt={item.productName}
+            fill
+            sizes="80px"
+            onError={() => setImgError(true)}
+            className="object-cover"
+            priority
+          />
+        ) : (
+          <div className="text-[10px] text-neutral-400 font-bold">AL</div>
+        )}
+      </div>
+
+      <div className="flex-1 flex flex-col justify-between">
+        <div>
+          <h4 className="font-plus-jakarta text-sm font-semibold text-brandBlack">
+            {toTitleCase(item.productName)}
+          </h4>
+          <p className="text-xs text-brandMuted mt-0.5">Ukuran: {item.sizeMl}ml</p>
+          <p className="text-xs font-semibold text-brandBlack mt-1 font-sans">
+            {formatRupiah(item.price)}
+          </p>
+        </div>
+
+        <div className="flex justify-between items-center mt-2">
+          <div className="flex items-center border border-brandBorder rounded-full overflow-hidden">
+            <button
+              onClick={() => updateQuantity(item.id, item.quantity - 1)}
+              className="p-1 hover:bg-brandGray transition-colors text-brandMuted hover:text-brandBlack rounded-full"
+            >
+              <Minus className="w-3 h-3" />
+            </button>
+            <span className="px-2 text-xs font-medium font-sans">{item.quantity}</span>
+            <button
+              onClick={() => updateQuantity(item.id, item.quantity + 1)}
+              className="p-1 hover:bg-brandGray transition-colors text-brandMuted hover:text-brandBlack rounded-full"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => removeFromCart(item.id)}
+            className="text-brandMuted hover:text-red-500 transition-colors p-1"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -19,14 +96,6 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const handleCheckoutClick = () => {
     onClose();
     router.push("/checkout");
-  };
-
-  const toTitleCase = (str: string) => {
-    return str
-      .toLowerCase()
-      .split(" ")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
   };
 
   return (
@@ -75,65 +144,12 @@ export default function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
             </div>
           ) : (
             items.map((item) => (
-              <div
+              <CartItemRow
                 key={item.id}
-                className="flex gap-4 border-b border-brandBorder pb-6 last:border-0 last:pb-0"
-              >
-                <div className="relative w-20 h-20 bg-brandGray border border-brandBorder flex-shrink-0 rounded-lg overflow-hidden">
-                  <Image
-                    src={item.imageUrl}
-                    alt={item.productName}
-                    fill
-                    sizes="80px"
-                    className="object-cover"
-                    priority
-                  />
-                </div>
-
-                <div className="flex-1 flex flex-col justify-between">
-                  <div>
-                    <h4 className="font-plus-jakarta text-sm font-semibold text-brandBlack">
-                      {toTitleCase(item.productName)}
-                    </h4>
-                    <p className="text-xs text-brandMuted mt-0.5">
-                      Ukuran: {item.sizeMl}ml
-                    </p>
-                    <p className="text-xs font-semibold text-brandBlack mt-1 font-sans">
-                      {formatRupiah(item.price)}
-                    </p>
-                  </div>
-
-                  <div className="flex justify-between items-center mt-2">
-                    <div className="flex items-center border border-brandBorder rounded-full overflow-hidden">
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className="p-1 hover:bg-brandGray transition-colors text-brandMuted hover:text-brandBlack rounded-full"
-                        aria-label="Kurangi jumlah"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="px-3 text-xs font-semibold text-brandBlack w-8 text-center font-sans">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="p-1 hover:bg-brandGray transition-colors text-brandMuted hover:text-brandBlack rounded-full"
-                        aria-label="Tambah jumlah"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={() => removeFromCart(item.id)}
-                      className="text-brandMuted hover:text-red-500 transition-colors"
-                      aria-label="Hapus item"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+                item={item}
+                updateQuantity={updateQuantity}
+                removeFromCart={removeFromCart}
+              />
             ))
           )}
         </div>

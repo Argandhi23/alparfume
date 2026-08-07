@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
+import { parseProductImages } from "@/lib/imageHelper";
 
 export const revalidate = 60;
 
@@ -47,22 +48,8 @@ export async function generateMetadata({ params }: ProductPageProps) {
     };
   }
 
-  // Parse images JSON array to get the first image for OG if it exists
-  let firstImageUrl = "/logo.png";
-  if (product.image_url) {
-    if (product.image_url.startsWith("[")) {
-      try {
-        const imageList = JSON.parse(product.image_url);
-        if (imageList && imageList.length > 0) {
-          firstImageUrl = imageList[0];
-        }
-      } catch {
-        firstImageUrl = product.image_url;
-      }
-    } else {
-      firstImageUrl = product.image_url;
-    }
-  }
+  const parsedImages = parseProductImages(product.image_url);
+  const firstImageUrl = parsedImages.length > 0 ? parsedImages[0] : "/logo.png";
 
   const title = product.name;
   const description = product.description || `Beli ${product.name} dari AL PARFUME. Parfum mewah, minimalis, dan tahan lama dengan notes terbaik.`;
@@ -102,19 +89,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     notFound();
   }
 
-  // Parse images JSON array
-  let imageList: string[] = [];
-  if (product.image_url) {
-    if (product.image_url.startsWith("[")) {
-      try {
-        imageList = JSON.parse(product.image_url);
-      } catch {
-        imageList = [product.image_url];
-      }
-    } else {
-      imageList = [product.image_url];
-    }
-  }
+  // Parse images
+  const imageList: string[] = parseProductImages(product.image_url);
 
   return (
     <div className="flex flex-col min-h-screen bg-brandWhite text-brandBlack">

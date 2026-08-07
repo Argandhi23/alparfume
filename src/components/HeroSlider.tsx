@@ -3,6 +3,58 @@
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { Banner } from "@/lib/supabase";
+import { sanitizeImageUrl } from "@/lib/imageHelper";
+
+export type SlideType = {
+  id: string;
+  title?: string | null;
+  subtitle?: string;
+  bgColor?: string;
+  image_url?: string | null;
+};
+
+function HeroSlideItem({ slide, index }: { slide: SlideType; index: number }) {
+  const [imgError, setImgError] = useState(false);
+  const rawUrl = "image_url" in slide ? slide.image_url : null;
+  const sanitizedUrl = sanitizeImageUrl(rawUrl);
+  const hasImage = Boolean(sanitizedUrl) && !imgError;
+
+  return (
+    <div
+      className={`w-full h-full flex-shrink-0 ${
+        "bgColor" in slide ? slide.bgColor : "bg-neutral-900 text-white"
+      } flex items-center justify-center relative select-none overflow-hidden`}
+    >
+      {hasImage ? (
+        <Image
+          src={sanitizedUrl as string}
+          alt={("title" in slide && slide.title) || "Banner Promo"}
+          fill
+          priority={index === 0}
+          onError={() => setImgError(true)}
+          className="object-cover w-full h-full pointer-events-none"
+        />
+      ) : (
+        <>
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
+          <div className="relative z-10 text-center px-6 max-w-xl space-y-2 pointer-events-none font-sans">
+            <span className="text-xs sm:text-sm md:text-base tracking-[0.3em] uppercase font-semibold text-neutral-400 block">
+              Al Parfume Official
+            </span>
+            <h2 className="text-lg sm:text-2xl md:text-4xl font-extrabold text-white font-sans tracking-tight">
+              {"title" in slide ? slide.title : "Banner Promo"}
+            </h2>
+            {"subtitle" in slide && slide.subtitle && (
+              <p className="text-xs sm:text-sm text-neutral-300 font-sans opacity-90 hidden sm:block">
+                {slide.subtitle}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 interface HeroSliderProps {
   banners?: Banner[];
@@ -147,45 +199,9 @@ export default function HeroSlider({ banners = [] }: HeroSliderProps) {
             transform: `translateX(calc(-${currentSlide * 100}% + ${dragOffset}px))` 
           }}
         >
-          {slides.map((slide, index) => {
-            const hasImage = "image_url" in slide && slide.image_url;
-
-            return (
-              <div
-                key={slide.id}
-                className={`w-full h-full flex-shrink-0 ${
-                  "bgColor" in slide ? slide.bgColor : "bg-neutral-900 text-white"
-                } flex items-center justify-center relative select-none overflow-hidden`}
-              >
-                {hasImage ? (
-                  <Image
-                    src={slide.image_url as string}
-                    alt={("title" in slide && slide.title) || "Banner Promo"}
-                    fill
-                    priority={index === 0}
-                    className="object-cover w-full h-full pointer-events-none"
-                  />
-                ) : (
-                  <>
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent pointer-events-none" />
-                    <div className="relative z-10 text-center px-6 max-w-xl space-y-2 pointer-events-none font-sans">
-                      <span className="text-xs sm:text-sm md:text-base tracking-[0.3em] uppercase font-semibold text-neutral-400 block">
-                        Al Parfume Official
-                      </span>
-                      <h2 className="text-lg sm:text-2xl md:text-4xl font-extrabold text-white font-sans tracking-tight">
-                        {"title" in slide ? slide.title : "Banner Promo"}
-                      </h2>
-                      {"subtitle" in slide && slide.subtitle && (
-                        <p className="text-xs sm:text-sm text-neutral-300 font-sans opacity-90 hidden sm:block">
-                          {slide.subtitle}
-                        </p>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
+          {slides.map((slide, index) => (
+            <HeroSlideItem key={slide.id} slide={slide} index={index} />
+          ))}
         </div>
 
         {/* Pagination Dots */}

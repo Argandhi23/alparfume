@@ -5,6 +5,7 @@ import { Search, X, ArrowRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { supabase, ProductWithVariants, ProductVariant } from "@/lib/supabase";
+import { sanitizeImageUrl } from "@/lib/imageHelper";
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -155,16 +156,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
   };
 
   const getProductImage = (imageUrl: string | null) => {
-    if (!imageUrl) return "/placeholder.jpg";
-    if (imageUrl.startsWith("[")) {
-      try {
-        const parsed = JSON.parse(imageUrl);
-        return parsed[0] || "/placeholder.jpg";
-      } catch {
-        return "/placeholder.jpg";
-      }
-    }
-    return imageUrl;
+    return sanitizeImageUrl(imageUrl) || "/logo.png";
   };
 
   return (

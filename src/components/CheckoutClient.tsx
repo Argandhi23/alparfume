@@ -21,6 +21,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart, CartItem } from "@/context/CartContext";
 import { supabase, ProductWithVariants, ProductVariant } from "@/lib/supabase";
+import { sanitizeImageUrl } from "@/lib/imageHelper";
 
 interface RegionOption {
   province_id?: string;
@@ -831,9 +832,9 @@ export function CheckoutClient() {
                       className="flex items-center gap-4 bg-[var(--background)] p-3.5 rounded-2xl border border-[var(--border)]"
                     >
                       <div className="relative w-16 h-16 bg-[var(--background-secondary)] rounded-xl overflow-hidden flex-shrink-0 border border-[var(--border)]">
-                        {item.imageUrl ? (
+                        {sanitizeImageUrl(item.imageUrl) ? (
                           <Image
-                            src={item.imageUrl}
+                            src={sanitizeImageUrl(item.imageUrl)!}
                             alt={item.productName}
                             fill
                             className="object-cover"
