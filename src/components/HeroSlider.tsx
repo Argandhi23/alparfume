@@ -30,6 +30,7 @@ function HeroSlideItem({ slide, index }: { slide: SlideType; index: number }) {
           src={sanitizedUrl as string}
           alt={("title" in slide && slide.title) || "Banner Promo"}
           fill
+          unoptimized
           priority={index === 0}
           onError={() => setImgError(true)}
           className="object-cover w-full h-full pointer-events-none"

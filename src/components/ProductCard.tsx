@@ -41,6 +41,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             src={displayImage}
             alt={product.name}
             fill
+            unoptimized
             sizes="(max-width: 768px) 50vw, 33vw"
             onError={() => setImgError(true)}
             className={`object-cover group-hover:scale-105 transition-transform duration-700 ease-out ${

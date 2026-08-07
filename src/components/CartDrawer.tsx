@@ -34,6 +34,7 @@ function CartItemRow({ item, updateQuantity, removeFromCart }: CartItemRowProps)
             src={imgUrl}
             alt={item.productName}
             fill
+            unoptimized
             sizes="80px"
             onError={() => setImgError(true)}
             className="object-cover"

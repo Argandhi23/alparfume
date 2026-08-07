@@ -62,6 +62,7 @@ function CategoryItem({ cat }: { cat: Category }) {
           src={imageUrl}
           alt={cat.name}
           fill
+          unoptimized
           onError={() => setImgError(true)}
           className="object-cover w-full h-full transition-transform duration-700 ease-out group-hover:scale-105"
         />

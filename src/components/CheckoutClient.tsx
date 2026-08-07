@@ -837,6 +837,7 @@ export function CheckoutClient() {
                             src={sanitizeImageUrl(item.imageUrl)!}
                             alt={item.productName}
                             fill
+                            unoptimized
                             className="object-cover"
                           />
                         ) : (

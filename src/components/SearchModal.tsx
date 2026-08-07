@@ -234,6 +234,7 @@ export default function SearchModal({ isOpen, onClose }: SearchModalProps) {
                           src={img}
                           alt={product.name}
                           fill
+                          unoptimized
                           className={`object-cover ${isSoldOut ? "grayscale opacity-70" : ""}`}
                         />
                       </div>

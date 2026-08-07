@@ -79,6 +79,7 @@ export default function ProductImageCarousel({ images, productName }: ProductIma
                   src={url}
                   alt={`${productName} - Angle ${index + 1}`}
                   fill
+                  unoptimized
                   priority={index === 0}
                   sizes="(max-width: 768px) 100vw, 50vw"
                   onError={() => handleImageError(index)}
@@ -118,6 +119,7 @@ export default function ProductImageCarousel({ images, productName }: ProductIma
                     src={url}
                     alt={`${productName} Thumbnail ${index + 1}`}
                     fill
+                    unoptimized
                     sizes="80px"
                     onError={() => handleImageError(index)}
                     className="object-cover"

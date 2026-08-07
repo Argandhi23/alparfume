@@ -1030,7 +1030,7 @@ export default function ProductsPage() {
                           <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
                         ) : imgUrl ? (
                           <>
-                            <Image src={imgUrl} alt={`Slot ${idx + 1}`} fill className="object-cover" />
+                            <Image src={imgUrl} alt={`Slot ${idx + 1}`} fill unoptimized className="object-cover" />
                             <button
                               type="button"
                               onClick={() => handleSlotDelete(idx)}

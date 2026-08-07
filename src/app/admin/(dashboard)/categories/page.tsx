@@ -286,7 +286,7 @@ export default function CategoriesPage() {
               <div key={b.id} className="bg-white border border-neutral-200 rounded-2xl overflow-hidden shadow-sm flex flex-col justify-between">
                 <div className="relative aspect-[16/9] bg-neutral-100 border-b border-neutral-100">
                   {b.image_url ? (
-                    <Image src={b.image_url} alt={b.title || "Banner"} fill className="object-cover" />
+                    <Image src={b.image_url} alt={b.title || "Banner"} fill unoptimized className="object-cover" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-xs italic">Tanpa Gambar</div>
                   )}

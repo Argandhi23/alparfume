@@ -605,6 +605,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                           alt="Bukti Transfer"
                           width={300}
                           height={300}
+                          unoptimized
                           className="w-full h-48 object-cover"
                         />
                       </div>
