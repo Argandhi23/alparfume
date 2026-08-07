@@ -8,6 +8,22 @@
   --foreground: #0a0a0a;
   --border: #e5e5e5;
   --text-muted: #737373;
+
+  /* Permanent Black Navbar & Footer, White Logo & Text */
+  --nav-bg: #050505;
+  --nav-fg: #ffffff;
+  --nav-border: #262626;
+  --nav-muted: #a3a3a3;
+  --nav-hover-bg: #171717;
+
+  --footer-bg: #050505;
+  --footer-fg: #d4d4d4;
+  --footer-heading: #ffffff;
+  --footer-border: #262626;
+  --footer-muted: #737373;
+
+  --logo-filter: brightness(0) invert(1);
+  --partner-logo-filter: brightness(0) invert(1);
 }
 
 [data-theme="dark"] {
@@ -16,6 +32,22 @@
   --foreground: #fafafa;
   --border: #2a2a2a;
   --text-muted: #a0a0a0;
+
+  /* Navbar & Footer stay PERMANENTLY BLACK in dark theme too */
+  --nav-bg: #050505;
+  --nav-fg: #ffffff;
+  --nav-border: #262626;
+  --nav-muted: #a3a3a3;
+  --nav-hover-bg: #171717;
+
+  --footer-bg: #050505;
+  --footer-fg: #d4d4d4;
+  --footer-heading: #ffffff;
+  --footer-border: #262626;
+  --footer-muted: #737373;
+
+  --logo-filter: brightness(0) invert(1);
+  --partner-logo-filter: brightness(0) invert(1);
 }
 
 body {
@@ -84,12 +116,13 @@ body {
 
 /* Logo theme switching */
 .logo-img {
-  filter: invert(1);
+  filter: var(--logo-filter);
   transition: filter 0.3s ease;
 }
 
-[data-theme="dark"] .logo-img {
-  filter: invert(0);
+.partner-logo {
+  filter: var(--partner-logo-filter);
+  transition: filter 0.3s ease;
 }
 
 /* High Contrast Form Input & Dropdown Styling for Light & Dark Mode */

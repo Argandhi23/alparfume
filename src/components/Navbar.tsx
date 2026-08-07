@@ -61,14 +61,14 @@ export default function Navbar() {
   return (
     <>
       <nav
-        className={`sticky top-0 z-50 transition-all duration-300 font-sans ${
-          isScrolled
-            ? "bg-brandWhite/95 backdrop-blur-md shadow-sm border-b border-brandBorder/50 py-4"
-            : "bg-transparent border-b border-transparent py-6"
-        }`}
+        className="sticky top-0 z-50 transition-all duration-300 font-sans border-b"
         style={{
-          backgroundColor: isOpen ? "transparent" : isScrolled ? "var(--background)" : "transparent",
-          borderBottomColor: isOpen ? "transparent" : undefined,
+          backgroundColor: "var(--nav-bg)",
+          color: "var(--nav-fg)",
+          borderColor: "var(--nav-border)",
+          paddingTop: isScrolled ? "0.85rem" : "1.25rem",
+          paddingBottom: isScrolled ? "0.85rem" : "1.25rem",
+          boxShadow: isScrolled ? "0 4px 20px -2px rgba(0, 0, 0, 0.2)" : "none",
         }}
       >
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between">
@@ -83,15 +83,16 @@ export default function Navbar() {
             />
           </Link>
 
-          <div className="flex items-center space-x-6 md:space-x-8">
-
-
+          <div className="flex items-center space-x-4 md:space-x-6">
             {/* Search Icon */}
             <button
               onClick={() => setIsSearchOpen(true)}
-              className={`text-brandBlack hover:opacity-75 transition-all p-2 hover:bg-brandGray rounded-full transition-all duration-300 ${
+              className={`p-2 rounded-full transition-all duration-300 ${
                 isOpen ? "opacity-0 pointer-events-none scale-90" : "opacity-100"
               }`}
+              style={{ color: "var(--nav-fg)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--nav-hover-bg)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
               aria-label="Cari Produk"
               title="Cari Parfum"
             >
@@ -109,9 +110,12 @@ export default function Navbar() {
                 }
                 toggleTheme();
               }}
-              className={`text-brandBlack hover:opacity-75 transition-all p-2 hover:bg-brandGray rounded-full transition-all duration-300 ${
+              className={`p-2 rounded-full transition-all duration-300 ${
                 isOpen ? "opacity-0 pointer-events-none scale-90" : "opacity-100"
               }`}
+              style={{ color: "var(--nav-fg)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--nav-hover-bg)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
               aria-label="Toggle Theme"
             >
               {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
@@ -120,35 +124,47 @@ export default function Navbar() {
             {/* Cart Icon */}
             <button
               onClick={() => setIsCartOpen(true)}
-              className={`relative text-brandBlack hover:opacity-75 transition-all flex items-center p-2 hover:bg-brandGray rounded-full transition-all duration-300 ${
+              className={`relative flex items-center p-2 rounded-full transition-all duration-300 ${
                 isOpen ? "opacity-0 pointer-events-none scale-90" : "opacity-100"
               }`}
+              style={{ color: "var(--nav-fg)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--nav-hover-bg)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
               aria-label="Open Cart"
             >
               <ShoppingBag className="w-4 h-4" />
               {totalItems > 0 && (
-                <span className="absolute top-0 right-0 bg-[var(--foreground)] text-[var(--background)] text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full">
+                <span
+                  className="absolute top-0 right-0 text-[9px] font-bold w-4 h-4 flex items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: "var(--nav-fg)",
+                    color: "var(--nav-bg)",
+                  }}
+                >
                   {totalItems}
                 </span>
               )}
             </button>
 
-            {/* Mobile hamburger (Apple style: 2 lines morphing into X) */}
+            {/* Mobile hamburger */}
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="md:hidden text-brandBlack hover:opacity-75 transition-all p-2.5 hover:bg-brandGray rounded-full relative w-10 h-10 flex items-center justify-center z-50"
+              className="md:hidden p-2.5 rounded-full relative w-10 h-10 flex items-center justify-center z-50 transition-colors"
+              style={{ color: "var(--nav-fg)" }}
               aria-label={isOpen ? "Close Menu" : "Open Menu"}
             >
               <div className="relative w-5 h-3 flex flex-col justify-between">
                 <span
-                  className={`block absolute w-full h-[1px] bg-current transition-all duration-300 ease-in-out ${
+                  className={`block absolute w-full h-[1.5px] transition-all duration-300 ease-in-out ${
                     isOpen ? "top-[5px] rotate-45" : "top-[2px]"
                   }`}
+                  style={{ backgroundColor: "var(--nav-fg)" }}
                 />
                 <span
-                  className={`block absolute w-full h-[1px] bg-current transition-all duration-300 ease-in-out ${
+                  className={`block absolute w-full h-[1.5px] transition-all duration-300 ease-in-out ${
                     isOpen ? "top-[5px] -rotate-45" : "top-[9px]"
                   }`}
+                  style={{ backgroundColor: "var(--nav-fg)" }}
                 />
               </div>
             </button>
@@ -157,9 +173,13 @@ export default function Navbar() {
 
         {/* Mobile Full Screen Menu Overlay */}
         <div
-          className={`fixed inset-0 w-full h-screen bg-[var(--background)] z-40 md:hidden flex flex-col justify-start pt-28 px-8 transition-all duration-300 ease-in-out ${
+          className={`fixed inset-0 w-full h-screen z-40 md:hidden flex flex-col justify-start pt-28 px-8 transition-all duration-300 ease-in-out ${
             isOpen ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 -translate-y-4 pointer-events-none"
           }`}
+          style={{
+            backgroundColor: "var(--nav-bg)",
+            color: "var(--nav-fg)",
+          }}
         >
           <div className="flex flex-col space-y-6 mt-4">
             {menuItems.map((item, idx) => (
@@ -174,16 +194,17 @@ export default function Navbar() {
                     scrollToSection(e, item.targetId);
                   }
                 }}
-                className={`flex items-center justify-between text-[28px] font-bold text-[var(--foreground)] hover:opacity-75 transition-all duration-300 ${
+                className={`flex items-center justify-between text-[26px] font-bold hover:opacity-75 transition-all duration-300 ${
                   isOpen ? "animate-slide-up" : "opacity-0"
                 }`}
                 style={{
+                  color: "var(--nav-fg)",
                   animationDelay: `${idx * 60}ms`,
                   animationFillMode: "both",
                 }}
               >
                 <span>{item.label}</span>
-                <ChevronRight className="w-6 h-6 text-neutral-400/80 stroke-[1.5]" />
+                <ChevronRight className="w-6 h-6 stroke-[1.5]" style={{ color: "var(--nav-muted)" }} />
               </Link>
             ))}
           </div>

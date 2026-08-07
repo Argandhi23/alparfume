@@ -5,11 +5,18 @@ import Image from "next/image";
 
 export default function Footer() {
   return (
-    <footer className="bg-white border-t border-neutral-200/80 text-neutral-600 py-8 px-4 sm:px-6 md:px-8 font-sans text-xs transition-colors duration-300">
+    <footer
+      className="border-t py-10 px-4 sm:px-6 md:px-8 font-sans text-xs transition-colors duration-300"
+      style={{
+        backgroundColor: "var(--footer-bg)",
+        color: "var(--footer-fg)",
+        borderColor: "var(--footer-border)",
+      }}
+    >
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
         
-        {/* Left Column: Brand Logo & Social Icons (No text below logo) */}
-        <div className="space-y-3">
+        {/* Left Column: Brand Logo & Social Icons */}
+        <div className="space-y-4">
           <Link href="/" className="inline-block">
             <Image
               src="/logo.png"
@@ -22,13 +29,14 @@ export default function Footer() {
           </Link>
 
           {/* Social Media Links */}
-          <div className="flex items-center space-x-4 text-neutral-800">
+          <div className="flex items-center space-x-4">
             {/* WhatsApp */}
             <Link 
               href="https://wa.me/6281915931190" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-neutral-800 hover:text-black hover:scale-110 transition-all duration-300"
+              className="hover:scale-110 transition-all duration-300"
+              style={{ color: "var(--footer-fg)" }}
               title="WhatsApp"
             >
               <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
@@ -40,7 +48,8 @@ export default function Footer() {
               href="https://www.instagram.com/al.parfumeco" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-neutral-800 hover:text-black hover:scale-110 transition-all duration-300"
+              className="hover:scale-110 transition-all duration-300"
+              style={{ color: "var(--footer-fg)" }}
               title="Instagram"
             >
               <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-none stroke-current" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -54,7 +63,8 @@ export default function Footer() {
               href="https://www.tiktok.com/@alparfumeco?_r=1&_t=ZS-98RBwYcpSPB" 
               target="_blank" 
               rel="noopener noreferrer"
-              className="text-neutral-800 hover:text-black hover:scale-110 transition-all duration-300"
+              className="hover:scale-110 transition-all duration-300"
+              style={{ color: "var(--footer-fg)" }}
               title="TikTok"
             >
               <svg className="w-4 h-4 sm:w-5 sm:h-5 fill-current" viewBox="0 0 24 24">
@@ -64,12 +74,15 @@ export default function Footer() {
           </div>
         </div>
 
-        {/* Right Section: User Provided Partner PNG Logos */}
+        {/* Right Section: Partner Logos */}
         <div className="flex flex-col sm:flex-row gap-6 sm:gap-10 items-start sm:items-center">
           
           {/* Payment Logo (QRIS) */}
           <div className="space-y-1.5">
-            <h4 className="text-[10px] uppercase tracking-wider font-extrabold text-neutral-900 font-sans">
+            <h4
+              className="text-[10px] uppercase tracking-wider font-extrabold font-sans"
+              style={{ color: "var(--footer-heading)" }}
+            >
               Metode Pembayaran
             </h4>
             <div className="flex items-center gap-3 select-none">
@@ -78,68 +91,74 @@ export default function Footer() {
                 alt="QRIS"
                 width={200}
                 height={75}
-                className="h-5 sm:h-6 w-auto max-w-[80px] object-contain"
+                unoptimized
+                className="h-5 sm:h-6 w-auto max-w-[80px] object-contain partner-logo"
                 priority
               />
-              <span className="font-extrabold text-[11px] text-black tracking-wider border-l border-neutral-300 pl-2.5">
+              <span
+                className="font-extrabold text-[11px] tracking-wider border-l pl-2.5"
+                style={{
+                  color: "var(--footer-heading)",
+                  borderColor: "var(--footer-border)",
+                }}
+              >
                 COD
               </span>
             </div>
           </div>
 
-          {/* Shipping Logos (J&T Express, J&T Cargo, JNE, ID Express, SiCepat) */}
+          {/* Shipping Logos */}
           <div className="space-y-1.5">
-            <h4 className="text-[10px] uppercase tracking-wider font-extrabold text-neutral-900 font-sans">
+            <h4
+              className="text-[10px] uppercase tracking-wider font-extrabold font-sans"
+              style={{ color: "var(--footer-heading)" }}
+            >
               Metode Pengiriman
             </h4>
             <div className="flex flex-wrap items-center gap-4 sm:gap-6 select-none">
-              {/* J&T Express Logo */}
               <Image
                 src="/images/partners/j&t-express-logo.png"
                 alt="J&T Express"
                 width={200}
                 height={70}
-                className="h-5 sm:h-6 w-auto max-w-[100px] object-contain hover:opacity-85 transition-opacity"
+                unoptimized
+                className="h-5 sm:h-6 w-auto max-w-[100px] object-contain hover:opacity-85 transition-opacity partner-logo"
                 priority
               />
-
-              {/* J&T Cargo Logo */}
               <Image
                 src="/images/partners/j&t-cargo-logo.png"
                 alt="J&T Cargo"
                 width={200}
                 height={70}
-                className="h-5 sm:h-6 w-auto max-w-[95px] object-contain hover:opacity-85 transition-opacity"
+                unoptimized
+                className="h-5 sm:h-6 w-auto max-w-[95px] object-contain hover:opacity-85 transition-opacity partner-logo"
                 priority
               />
-
-              {/* JNE Logo */}
               <Image
                 src="/images/partners/jne-logo.png"
                 alt="JNE"
                 width={150}
                 height={60}
-                className="h-5 sm:h-6 w-auto max-w-[70px] object-contain hover:opacity-85 transition-opacity"
+                unoptimized
+                className="h-5 sm:h-6 w-auto max-w-[70px] object-contain hover:opacity-85 transition-opacity partner-logo"
                 priority
               />
-
-              {/* ID Express Logo */}
               <Image
                 src="/images/partners/id-express-logo.png"
                 alt="ID Express"
                 width={150}
                 height={120}
-                className="h-6 sm:h-7 w-auto max-w-[50px] object-contain hover:opacity-85 transition-opacity"
+                unoptimized
+                className="h-6 sm:h-7 w-auto max-w-[50px] object-contain hover:opacity-85 transition-opacity partner-logo"
                 priority
               />
-
-              {/* SiCepat Ekspres Logo */}
               <Image
                 src="/images/partners/sicepat-7684x2048.png"
                 alt="SiCepat Ekspres"
                 width={250}
                 height={70}
-                className="h-5 sm:h-6 w-auto max-w-[100px] object-contain hover:opacity-85 transition-opacity"
+                unoptimized
+                className="h-5 sm:h-6 w-auto max-w-[100px] object-contain hover:opacity-85 transition-opacity partner-logo"
                 priority
               />
             </div>
@@ -150,7 +169,13 @@ export default function Footer() {
       </div>
 
       {/* Bottom Copyright Bar */}
-      <div className="max-w-7xl mx-auto border-t border-neutral-200/60 mt-6 pt-4 flex flex-col sm:flex-row items-center justify-between text-[11px] text-neutral-400 font-light gap-2 font-sans">
+      <div
+        className="max-w-7xl mx-auto border-t mt-8 pt-4 flex flex-col sm:flex-row items-center justify-between text-[11px] font-light gap-2 font-sans"
+        style={{
+          borderColor: "var(--footer-border)",
+          color: "var(--footer-muted)",
+        }}
+      >
         <p>© {new Date().getFullYear()} AL PARFUME. All rights reserved.</p>
       </div>
     </footer>
