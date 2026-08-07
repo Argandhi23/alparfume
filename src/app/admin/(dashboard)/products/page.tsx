@@ -363,9 +363,27 @@ export default function ProductsPage() {
     }
     setFormCategoryId(matchedCatId);
 
-    setFormTopNotes(product.top_notes || "");
-    setFormMiddleNotes(product.middle_notes || "");
-    setFormBottomNotes(product.bottom_notes || "");
+    let topNotes = "";
+    let middleNotes = "";
+    let bottomNotes = "";
+    if (product.notes) {
+      try {
+        const parsedNotes = typeof product.notes === "string" ? JSON.parse(product.notes) : product.notes;
+        if (typeof parsedNotes === "object" && parsedNotes !== null) {
+          topNotes = parsedNotes.top || "";
+          middleNotes = parsedNotes.middle || "";
+          bottomNotes = parsedNotes.bottom || "";
+        } else {
+          topNotes = String(product.notes);
+        }
+      } catch {
+        topNotes = String(product.notes);
+      }
+    }
+    setFormTopNotes(topNotes);
+    setFormMiddleNotes(middleNotes);
+    setFormBottomNotes(bottomNotes);
+
     setFormIsActive(product.is_active);
     setFormIsSoldOut(product.is_sold_out || false);
     setFormIsBestSeller(product.is_best_seller || false);
@@ -413,14 +431,18 @@ export default function ProductsPage() {
       const stockVal = typeof formStock === "number" && !isNaN(formStock) ? formStock : Number(formStock) || 0;
       const isSoldOutVal = stockVal <= 0 ? true : formIsSoldOut;
 
+      const notesObj = {
+        top: formTopNotes.trim(),
+        middle: formMiddleNotes.trim(),
+        bottom: formBottomNotes.trim(),
+      };
+
       const productPayload = {
         name: formName.trim(),
         slug: formSlug.trim(),
         description: formDescription.trim(),
+        notes: JSON.stringify(notesObj),
         category_id: formCategoryId || null,
-        top_notes: formTopNotes.trim() || null,
-        middle_notes: formMiddleNotes.trim() || null,
-        bottom_notes: formBottomNotes.trim() || null,
         is_active: formIsActive,
         is_sold_out: isSoldOutVal,
         is_best_seller: formIsBestSeller,
@@ -430,33 +452,11 @@ export default function ProductsPage() {
       };
 
       if (modalType === "add") {
-        let { data: newProd, error: prodErr } = await supabase
+        const { data: newProd, error: prodErr } = await supabase
           .from("products")
           .insert([productPayload])
           .select()
           .single();
-
-        if (prodErr) {
-          console.warn("Product add with full payload failed, trying core payload:", prodErr);
-          const corePayload = {
-            name: formName.trim(),
-            slug: formSlug.trim(),
-            description: formDescription.trim(),
-            category_id: formCategoryId || null,
-            is_active: formIsActive,
-            is_sold_out: isSoldOutVal,
-            is_best_seller: formIsBestSeller,
-            stock: stockVal,
-            image_url: imageUrlJson,
-          };
-          const fallbackRes = await supabase
-            .from("products")
-            .insert([corePayload])
-            .select()
-            .single();
-          newProd = fallbackRes.data;
-          prodErr = fallbackRes.error;
-        }
 
         if (prodErr) throw prodErr;
 
@@ -470,49 +470,10 @@ export default function ProductsPage() {
           if (varErr) console.warn("Variant add notice:", varErr);
         }
       } else if (modalType === "edit" && selectedProductId) {
-        let { error: prodErr } = await supabase
+        const { error: prodErr } = await supabase
           .from("products")
           .update(productPayload)
           .eq("id", selectedProductId);
-
-        if (prodErr) {
-          console.warn("Product update with full payload failed, trying core payload:", prodErr);
-          const corePayload = {
-            name: formName.trim(),
-            slug: formSlug.trim(),
-            description: formDescription.trim(),
-            category_id: formCategoryId || null,
-            top_notes: formTopNotes.trim() || null,
-            middle_notes: formMiddleNotes.trim() || null,
-            bottom_notes: formBottomNotes.trim() || null,
-            is_active: formIsActive,
-            is_sold_out: isSoldOutVal,
-            is_best_seller: formIsBestSeller,
-            stock: stockVal,
-            image_url: imageUrlJson,
-          };
-          const fallbackRes = await supabase
-            .from("products")
-            .update(corePayload)
-            .eq("id", selectedProductId);
-          prodErr = fallbackRes.error;
-        }
-
-        if (prodErr) {
-          console.warn("Product update with core payload failed, trying minimal payload:", prodErr);
-          const minimalPayload = {
-            name: formName.trim(),
-            stock: stockVal,
-            is_active: formIsActive,
-            is_sold_out: isSoldOutVal,
-            image_url: imageUrlJson,
-          };
-          const minimalRes = await supabase
-            .from("products")
-            .update(minimalPayload)
-            .eq("id", selectedProductId);
-          prodErr = minimalRes.error;
-        }
 
         if (prodErr) throw prodErr;
 
