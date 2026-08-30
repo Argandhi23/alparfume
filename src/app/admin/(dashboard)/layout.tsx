@@ -80,6 +80,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 alt="Alparfume Logo" 
                 width={200}
                 height={60}
+                unoptimized
                 className="object-contain filter invert brightness-0" 
               />
             </div>

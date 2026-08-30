@@ -163,22 +163,28 @@ export async function PATCH(request: NextRequest) {
         ? String(updatePayload.fulfillment_status)
         : oldFulfillmentStatus;
 
+      const wasPaidOrCompleted = oldPaymentStatus === "paid" || oldFulfillmentStatus === "completed";
+      const isNowPaidOrCompleted = newPaymentStatus === "paid" || newFulfillmentStatus === "completed";
+      const affectedSlugs = new Set<string>();
+
       // ========================================================
-      // GUARD 1: Transition to 'paid' (Deduct Stock)
-      // TEST 1 & TEST 4: Only deduct if old status was NOT 'paid' and new status IS 'paid'
+      // GUARD 1: Transition to Paid/Completed (Deduct Stock)
+      // Only deduct if order was NOT previously paid/completed
       // ========================================================
-      if (oldPaymentStatus !== "paid" && newPaymentStatus === "paid") {
+      if (!wasPaidOrCompleted && isNowPaidOrCompleted) {
         const items = order.order_items || [];
         const deductedItems: { variant_id: string; qty: number }[] = [];
 
         for (const item of items) {
+          const qtyToDeduct = Math.max(1, Number(item.qty || 1));
+
           if (item.variant_id) {
-            // Call Postgres Atomic function
+            // 1. Call Postgres Atomic function for variant stock
             const { data: isSuccess, error: rpcErr } = await serviceClient.rpc(
               "deduct_product_stock",
               {
                 p_variant_id: item.variant_id,
-                p_qty: Number(item.qty || 1),
+                p_qty: qtyToDeduct,
                 p_order_id: order.id,
               }
             );
@@ -205,32 +211,109 @@ export async function PATCH(request: NextRequest) {
               );
             }
 
-            deductedItems.push({ variant_id: item.variant_id, qty: Number(item.qty || 1) });
+            deductedItems.push({ variant_id: item.variant_id, qty: qtyToDeduct });
+
+            // 2. Fetch variant's parent product to deduct products.stock
+            const { data: variantData } = await serviceClient
+              .from("product_variants")
+              .select("product_id")
+              .eq("id", item.variant_id)
+              .maybeSingle();
+
+            const productId = variantData?.product_id;
+            if (productId) {
+              const { data: productData } = await serviceClient
+                .from("products")
+                .select("id, stock, slug, is_sold_out")
+                .eq("id", productId)
+                .maybeSingle();
+
+              if (productData) {
+                if (productData.slug) affectedSlugs.add(productData.slug);
+                const currentProdStock = typeof productData.stock === "number" ? productData.stock : 10;
+                const newProdStock = Math.max(0, currentProdStock - qtyToDeduct);
+                const isSoldOutNow = newProdStock <= 0;
+
+                await serviceClient
+                  .from("products")
+                  .update({
+                    stock: newProdStock,
+                    is_sold_out: isSoldOutNow,
+                  })
+                  .eq("id", productId);
+              }
+            }
+          } else if (item.product_name_snapshot) {
+            // Fallback if variant_id is missing: match product by name
+            const { data: matchedProd } = await serviceClient
+              .from("products")
+              .select("id, stock, slug, is_sold_out")
+              .ilike("name", item.product_name_snapshot.trim())
+              .maybeSingle();
+
+            if (matchedProd) {
+              if (matchedProd.slug) affectedSlugs.add(matchedProd.slug);
+              const currentProdStock = typeof matchedProd.stock === "number" ? matchedProd.stock : 10;
+              const newProdStock = Math.max(0, currentProdStock - qtyToDeduct);
+              const isSoldOutNow = newProdStock <= 0;
+
+              await serviceClient
+                .from("products")
+                .update({
+                  stock: newProdStock,
+                  is_sold_out: isSoldOutNow,
+                })
+                .eq("id", matchedProd.id);
+            }
           }
         }
       }
 
       // ========================================================
-      // GUARD 2: Anti-Double-Deduct Guard
-      // TEST 2: If old status IS 'paid' and new status IS ALSO 'paid', DO NOT DEDUCT AGAIN!
+      // GUARD 3: Transition from Paid/Completed to 'cancelled' (Restore Stock)
       // ========================================================
-      // (Handled automatically by checking oldPaymentStatus !== 'paid' above)
-
-      // ========================================================
-      // GUARD 3: Transition from 'paid' to 'cancelled' (Restore Stock)
-      // TEST 3: Restore stock if previously paid and now cancelled
-      // ========================================================
-      if (oldPaymentStatus === "paid" && newPaymentStatus === "cancelled") {
+      if (wasPaidOrCompleted && (newPaymentStatus === "cancelled" || newFulfillmentStatus === "cancelled")) {
         const items = order.order_items || [];
 
         for (const item of items) {
+          const qtyToRestore = Math.max(1, Number(item.qty || 1));
+
           if (item.variant_id) {
             await serviceClient.rpc("restore_product_stock", {
               p_variant_id: item.variant_id,
-              p_qty: Number(item.qty || 1),
+              p_qty: qtyToRestore,
               p_order_id: order.id,
               p_reason: "cancellation",
             });
+
+            const { data: variantData } = await serviceClient
+              .from("product_variants")
+              .select("product_id")
+              .eq("id", item.variant_id)
+              .maybeSingle();
+
+            const productId = variantData?.product_id;
+            if (productId) {
+              const { data: productData } = await serviceClient
+                .from("products")
+                .select("id, stock, slug")
+                .eq("id", productId)
+                .maybeSingle();
+
+              if (productData) {
+                if (productData.slug) affectedSlugs.add(productData.slug);
+                const currentProdStock = typeof productData.stock === "number" ? productData.stock : 0;
+                const newProdStock = currentProdStock + qtyToRestore;
+
+                await serviceClient
+                  .from("products")
+                  .update({
+                    stock: newProdStock,
+                    is_sold_out: newProdStock <= 0,
+                  })
+                  .eq("id", productId);
+              }
+            }
           }
         }
       }
@@ -271,6 +354,19 @@ export async function PATCH(request: NextRequest) {
       if (orderUpdateErr) {
         console.error("Error updating orders table:", orderUpdateErr);
         return NextResponse.json({ error: orderUpdateErr.message }, { status: 500 });
+      }
+
+      // Trigger On-Demand Cache Revalidation for homepage & updated products
+      try {
+        const { revalidatePath } = await import("next/cache");
+        revalidatePath("/");
+        for (const slug of Array.from(affectedSlugs)) {
+          if (slug) {
+            revalidatePath(`/products/${slug}`);
+          }
+        }
+      } catch (revErr) {
+        console.warn("Notice during revalidatePath:", revErr);
       }
 
       return NextResponse.json({ success: true, targetId: order.id });

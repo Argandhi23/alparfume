@@ -5,7 +5,8 @@ import { supabase, OrderIntent } from "@/lib/supabase";
 import { formatRupiah } from "@/lib/whatsapp";
 import { 
   Trash2, Loader2, X, Image as ImageIcon, Truck, ChevronLeft, ChevronRight, Download,
-  CheckCircle2, Clock, Store, Search, Filter, MessageCircle, RefreshCw
+  CheckCircle2, Clock, Store, Search, Filter, MessageCircle, RefreshCw,
+  Calendar, RotateCcw, PackageCheck
 } from "lucide-react";
 
 interface CartItemMeta {
@@ -21,9 +22,13 @@ export default function OrdersPage() {
   const [intents, setIntents] = useState<OrderIntent[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   
-  // Search & Filter state
+  // Search & Advanced Filter states
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid" | "cod">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "paid" | "completed" | "cod">("all");
+  const [deliveryFilter, setDeliveryFilter] = useState<"all" | "courier" | "pickup">("all");
+  const [datePreset, setDatePreset] = useState<"all" | "today" | "7days" | "30days" | "custom">("all");
+  const [customStartDate, setCustomStartDate] = useState<string>("");
+  const [customEndDate, setCustomEndDate] = useState<string>("");
 
   // Pagination
   const [intentsPage, setIntentsPage] = useState(1);
@@ -842,7 +847,7 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
     }
   };
 
-  // Filtered Intents List
+  // Advanced Filtered Intents List
   const filteredIntents = useMemo(() => {
     return intents.filter((int) => {
       // 1. Search Query Filter
@@ -853,43 +858,102 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
         const resiMatch = (int.tracking_number || "").toLowerCase().includes(q);
         const codeMatch = (int.order_code || "").toLowerCase().includes(q);
         const prodMatch = (int.product_name || int.items_json || "").toLowerCase().includes(q);
-        if (!nameMatch && !waMatch && !resiMatch && !codeMatch && !prodMatch) {
+        const addrMatch = (int.customer_address || "").toLowerCase().includes(q);
+        if (!nameMatch && !waMatch && !resiMatch && !codeMatch && !prodMatch && !addrMatch) {
           return false;
         }
       }
 
-      // 2. Status Filter
+      // 2. Identify Pickup vs Courier Delivery
+      const addressLower = (int.customer_address || "").toLowerCase();
+      const isPickupOrder =
+        int.delivery_method === "pickup" ||
+        int.payment_method === "cod_pickup" ||
+        int.courier_name === "Ambil di Toko" ||
+        addressLower.includes("ambil di toko") ||
+        addressLower.includes("toko madiun") ||
+        (int.items_json &&
+          (int.items_json.includes('"payment_method":"cod_pickup"') ||
+            int.items_json.includes('"delivery_method":"pickup"') ||
+            int.items_json.includes('"Ambil di Toko"')));
+
+      // Delivery Method Filter
+      if (deliveryFilter === "courier" && isPickupOrder) return false;
+      if (deliveryFilter === "pickup" && !isPickupOrder) return false;
+
+      // 3. Status Filter
+      const pStatus = (int.payment_status || "").toLowerCase();
+      const fStatus = (int.fulfillment_status || "").toLowerCase();
+
       if (statusFilter === "paid") {
-        return int.payment_status === "paid";
+        if (pStatus !== "paid") return false;
+      } else if (statusFilter === "pending") {
+        if (pStatus === "paid" || isPickupOrder) return false;
+      } else if (statusFilter === "completed") {
+        if (fStatus !== "completed" && fStatus !== "selesai") return false;
+      } else if (statusFilter === "cod") {
+        if (!isPickupOrder) return false;
       }
-      if (statusFilter === "pending") {
-        const isPickupOrder =
-          int.payment_method === "cod_pickup" ||
-          int.courier_name === "Ambil di Toko" ||
-          (int.customer_address && int.customer_address.includes("AMBIL DI TOKO")) ||
-          (int.items_json &&
-            (int.items_json.includes('"payment_method":"cod_pickup"') ||
-              int.items_json.includes('"delivery_method":"pickup"') ||
-              int.items_json.includes('"Ambil di Toko"')));
 
-        return int.payment_status !== "paid" && !isPickupOrder;
-      }
-      if (statusFilter === "cod") {
-        const isPickupOrder =
-          int.payment_method === "cod_pickup" ||
-          int.courier_name === "Ambil di Toko" ||
-          (int.customer_address && int.customer_address.includes("AMBIL DI TOKO")) ||
-          (int.items_json &&
-            (int.items_json.includes('"payment_method":"cod_pickup"') ||
-              int.items_json.includes('"delivery_method":"pickup"') ||
-              int.items_json.includes('"Ambil di Toko"')));
+      // 4. Date Range Filter
+      if (datePreset !== "all" && int.created_at) {
+        const orderDate = new Date(int.created_at);
+        const now = new Date();
 
-        return isPickupOrder;
+        if (datePreset === "today") {
+          const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          if (orderDate < startOfToday) return false;
+        } else if (datePreset === "7days") {
+          const sevenDaysAgo = new Date();
+          sevenDaysAgo.setDate(now.getDate() - 7);
+          sevenDaysAgo.setHours(0, 0, 0, 0);
+          if (orderDate < sevenDaysAgo) return false;
+        } else if (datePreset === "30days") {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(now.getDate() - 30);
+          thirtyDaysAgo.setHours(0, 0, 0, 0);
+          if (orderDate < thirtyDaysAgo) return false;
+        } else if (datePreset === "custom") {
+          if (customStartDate) {
+            const start = new Date(customStartDate);
+            start.setHours(0, 0, 0, 0);
+            if (orderDate < start) return false;
+          }
+          if (customEndDate) {
+            const end = new Date(customEndDate);
+            end.setHours(23, 59, 59, 999);
+            if (orderDate > end) return false;
+          }
+        }
       }
 
       return true;
     });
-  }, [intents, searchQuery, statusFilter]);
+  }, [intents, searchQuery, statusFilter, deliveryFilter, datePreset, customStartDate, customEndDate]);
+
+  const filteredTotalRevenue = useMemo(() => {
+    return filteredIntents.reduce((acc, curr) => acc + Number(curr.total_price || curr.price || 0), 0);
+  }, [filteredIntents]);
+
+  const isAnyFilterActive = useMemo(() => {
+    return (
+      searchQuery.trim() !== "" ||
+      statusFilter !== "all" ||
+      deliveryFilter !== "all" ||
+      datePreset !== "all" ||
+      customStartDate !== "" ||
+      customEndDate !== ""
+    );
+  }, [searchQuery, statusFilter, deliveryFilter, datePreset, customStartDate, customEndDate]);
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setDeliveryFilter("all");
+    setDatePreset("all");
+    setCustomStartDate("");
+    setCustomEndDate("");
+  };
 
   const totalPages = Math.ceil(totalIntentsCount / intentsLimit) || 1;
 
@@ -907,7 +971,7 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
             </span>
           </div>
           <p className="text-xs text-neutral-500">
-            Kelola transaksi masuk, konfirmasi bukti pembayaran QRIS, dan input resi pengiriman.
+            Kelola transaksi masuk, verifikasi bukti pembayaran QRIS, dan tracking resi pengiriman.
           </p>
         </div>
 
@@ -944,71 +1008,239 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
         </div>
       </div>
 
-      {/* Filter & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-xs">
-        {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
-          <button
-            onClick={() => setStatusFilter("all")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-              statusFilter === "all"
-                ? "bg-black text-white shadow-xs"
-                : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-            }`}
-          >
-            Semua
-          </button>
-          <button
-            onClick={() => setStatusFilter("pending")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
-              statusFilter === "pending"
-                ? "bg-amber-500 text-white shadow-xs"
-                : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
-            }`}
-          >
-            <Clock className="w-3.5 h-3.5" />
-            Perlu Verifikasi
-          </button>
-          <button
-            onClick={() => setStatusFilter("paid")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
-              statusFilter === "paid"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Lunas
-          </button>
-          <button
-            onClick={() => setStatusFilter("cod")}
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
-              statusFilter === "cod"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60"
-            }`}
-          >
-            <Store className="w-3.5 h-3.5" />
-            Ambil Toko (COD)
-          </button>
+      {/* Advanced Filter Toolbar */}
+      <div className="bg-white p-5 rounded-3xl border border-neutral-200/80 shadow-xs space-y-4">
+        {/* Row 1: Search & Date Range Preset */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Search Input Bar */}
+          <div className="relative flex-1 max-w-lg">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari nama, WA, no. resi, kode order, produk..."
+              className="w-full pl-9 pr-8 py-2.5 bg-neutral-50 border border-neutral-200/80 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-all font-sans"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black text-xs"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Date Range Preset Chips */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+            <span className="text-[11px] text-neutral-400 font-medium mr-1 flex items-center gap-1 shrink-0">
+              <Calendar className="w-3.5 h-3.5" /> Waktu:
+            </span>
+            <button
+              onClick={() => setDatePreset("all")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                datePreset === "all"
+                  ? "bg-neutral-900 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              Semua
+            </button>
+            <button
+              onClick={() => setDatePreset("today")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                datePreset === "today"
+                  ? "bg-neutral-900 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              Hari Ini
+            </button>
+            <button
+              onClick={() => setDatePreset("7days")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                datePreset === "7days"
+                  ? "bg-neutral-900 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              7 Hari
+            </button>
+            <button
+              onClick={() => setDatePreset("30days")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                datePreset === "30days"
+                  ? "bg-neutral-900 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              30 Hari
+            </button>
+            <button
+              onClick={() => setDatePreset("custom")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                datePreset === "custom"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60"
+              }`}
+            >
+              <Calendar className="w-3 h-3" />
+              Kustom
+            </button>
+          </div>
         </div>
 
-        {/* Search Input Bar */}
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari nama, WA, resi..."
-            className="w-full pl-9 pr-4 py-2 bg-neutral-50 border border-neutral-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-black focus:bg-white transition-all"
-          />
-          {searchQuery && (
+        {/* Custom Date Range Picker Inputs (Appears only if datePreset === 'custom') */}
+        {datePreset === "custom" && (
+          <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="text-xs font-semibold text-amber-900 flex items-center gap-1.5 shrink-0">
+              <Calendar className="w-4 h-4 text-amber-600" />
+              Rentang Tanggal:
+            </div>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="bg-white border border-neutral-300 rounded-xl px-3 py-1.5 text-xs text-neutral-800 focus:outline-none focus:ring-2 focus:ring-black"
+                placeholder="Dari Tanggal"
+              />
+              <span className="text-xs text-neutral-400">s/d</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="bg-white border border-neutral-300 rounded-xl px-3 py-1.5 text-xs text-neutral-800 focus:outline-none focus:ring-2 focus:ring-black"
+                placeholder="Sampai Tanggal"
+              />
+              {(customStartDate || customEndDate) && (
+                <button
+                  onClick={() => { setCustomStartDate(""); setCustomEndDate(""); }}
+                  className="text-xs text-amber-900 underline hover:text-black font-semibold ml-1"
+                >
+                  Clear Tanggal
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Row 2: Status Filter & Delivery Filter */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pt-2 border-t border-neutral-100">
+          {/* Status Filter Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none w-full md:w-auto">
+            <span className="text-[11px] text-neutral-400 font-medium mr-1 shrink-0">Status:</span>
             <button
-              onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-black text-xs"
+              onClick={() => setStatusFilter("all")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                statusFilter === "all"
+                  ? "bg-black text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
             >
-              <X className="w-3.5 h-3.5" />
+              Semua
+            </button>
+            <button
+              onClick={() => setStatusFilter("pending")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                statusFilter === "pending"
+                  ? "bg-amber-500 text-white shadow-xs"
+                  : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              Perlu Verifikasi
+            </button>
+            <button
+              onClick={() => setStatusFilter("paid")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                statusFilter === "paid"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+              }`}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Lunas
+            </button>
+            <button
+              onClick={() => setStatusFilter("completed")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                statusFilter === "completed"
+                  ? "bg-neutral-900 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 border border-neutral-200"
+              }`}
+            >
+              <PackageCheck className="w-3.5 h-3.5" />
+              Selesai
+            </button>
+            <button
+              onClick={() => setStatusFilter("cod")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                statusFilter === "cod"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200/60"
+              }`}
+            >
+              <Store className="w-3.5 h-3.5" />
+              Ambil Toko (COD)
+            </button>
+          </div>
+
+          {/* Delivery Method Filter Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+            <span className="text-[11px] text-neutral-400 font-medium mr-1 shrink-0">Pengiriman:</span>
+            <button
+              onClick={() => setDeliveryFilter("all")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+                deliveryFilter === "all"
+                  ? "bg-neutral-800 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              Semua
+            </button>
+            <button
+              onClick={() => setDeliveryFilter("courier")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
+                deliveryFilter === "courier"
+                  ? "bg-neutral-800 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" /> Kurir
+            </button>
+            <button
+              onClick={() => setDeliveryFilter("pickup")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap flex items-center gap-1 ${
+                deliveryFilter === "pickup"
+                  ? "bg-neutral-800 text-white shadow-xs"
+                  : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
+              }`}
+            >
+              <Store className="w-3.5 h-3.5" /> Toko
+            </button>
+          </div>
+        </div>
+
+        {/* Row 3: Active Filters Summary Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-neutral-100 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-neutral-500 font-medium">
+              Menampilkan <strong className="text-neutral-900 font-bold">{filteredIntents.length}</strong> dari {totalIntentsCount} pesanan
+            </span>
+            <span className="text-neutral-300">•</span>
+            <span className="text-neutral-500 font-medium">
+              Total Nilai: <strong className="text-emerald-600 font-bold">{formatRupiah(filteredTotalRevenue)}</strong>
+            </span>
+          </div>
+
+          {isAnyFilterActive && (
+            <button
+              onClick={handleResetFilters}
+              className="inline-flex items-center gap-1.5 text-xs text-neutral-600 hover:text-black font-semibold bg-neutral-100 hover:bg-neutral-200 px-3 py-1 rounded-xl transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" /> Reset Semua Filter
             </button>
           )}
         </div>
@@ -1024,14 +1256,14 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
         <div className="text-center py-16 border border-dashed border-neutral-300 rounded-3xl bg-white space-y-2">
           <Filter className="w-8 h-8 text-neutral-300 mx-auto" />
           <p className="text-xs tracking-widest text-neutral-400 uppercase font-bold">
-            {searchQuery || statusFilter !== "all" ? "Tidak ada pesanan yang sesuai filter" : "Belum ada pesanan masuk"}
+            {isAnyFilterActive ? "Tidak ada pesanan yang sesuai kriteria filter" : "Belum ada pesanan masuk"}
           </p>
-          {(searchQuery || statusFilter !== "all") && (
+          {isAnyFilterActive && (
             <button
-              onClick={() => { setSearchQuery(""); setStatusFilter("all"); }}
-              className="text-xs text-black font-bold hover:underline"
+              onClick={handleResetFilters}
+              className="text-xs text-black font-bold hover:underline inline-flex items-center gap-1.5 mt-2"
             >
-              Reset Filter
+              <RotateCcw className="w-3.5 h-3.5" /> Reset Filter
             </button>
           )}
         </div>

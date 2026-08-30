@@ -757,7 +757,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               <p className="text-xs text-neutral-500 mt-1">Gunakan E-Wallet atau M-Banking</p>
             </div>
             <div className="bg-white p-2 border rounded-2xl flex justify-center">
-              <Image src="/qris.jpg" alt="QRIS Zoom" width={320} height={320} className="rounded-xl object-contain" />
+              <Image src="/qris.jpg" alt="QRIS Zoom" width={320} height={320} unoptimized className="rounded-xl object-contain" />
             </div>
             <button
               onClick={() => setIsQrisZoomed(false)}

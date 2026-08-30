@@ -492,7 +492,7 @@ export default function CategoriesPage() {
                 <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">Gambar Banner (16:9)</label>
                 {bannerFormImageUrl && (
                   <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden border border-neutral-200 mb-2 group">
-                    <Image src={bannerFormImageUrl} alt="Preview" fill className="object-cover" />
+                    <Image src={bannerFormImageUrl} alt="Preview" fill unoptimized className="object-cover" />
                     <button
                       type="button"
                       onClick={() => setBannerFormImageUrl("")}
@@ -649,7 +649,7 @@ export default function CategoriesPage() {
                 <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">Gambar Background (3:4)</label>
                 {categoryFormImageUrl && (
                   <div className="relative aspect-[3/4] w-28 rounded-xl overflow-hidden border border-neutral-200 mb-2 group">
-                    <Image src={categoryFormImageUrl} alt="Preview" fill className="object-cover" />
+                    <Image src={categoryFormImageUrl} alt="Preview" fill unoptimized className="object-cover" />
                     <button
                       type="button"
                       onClick={() => setCategoryFormImageUrl("")}

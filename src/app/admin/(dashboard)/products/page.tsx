@@ -465,6 +465,7 @@ export default function ProductsPage() {
             product_id: newProd.id,
             size_ml: Number(formSizeMl) || 30,
             price: Number(formPrice) || 45000,
+            stock: stockVal,
           };
           const { error: varErr } = await supabase.from("product_variants").insert([variantPayload]);
           if (varErr) console.warn("Variant add notice:", varErr);
@@ -488,6 +489,7 @@ export default function ProductsPage() {
             .update({
               price: Number(formPrice) || 45000,
               size_ml: Number(formSizeMl) || 30,
+              stock: stockVal,
             })
             .eq("id", existingVars[0].id);
         } else {
@@ -495,6 +497,7 @@ export default function ProductsPage() {
             product_id: selectedProductId,
             size_ml: Number(formSizeMl) || 30,
             price: Number(formPrice) || 45000,
+            stock: stockVal,
           }]);
         }
       }
