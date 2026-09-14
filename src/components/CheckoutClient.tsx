@@ -192,7 +192,7 @@ export function CheckoutClient() {
 
   const totalQuantity = checkoutItems.reduce((acc, curr) => acc + curr.quantity, 0);
   const itemTotal = checkoutItems.reduce((total, item) => total + item.price * item.quantity, 0);
-  const totalWeightGrams = Math.max(350, totalQuantity * 350);
+  const totalWeightGrams = Math.max(1000, totalQuantity * 1000);
 
   // Auto calculate ongkir
   useEffect(() => {

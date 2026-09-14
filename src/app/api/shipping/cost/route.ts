@@ -4,8 +4,8 @@ import { checkRateLimit } from "@/lib/rateLimit";
 const API_KEY = process.env.RAJAONGKIR_API_KEY || process.env.BINDERBYTE_API_KEY || "";
 const KOMERCE_BASE = "https://rajaongkir.komerce.id/api/v1";
 
-// Alparfume Default Origin: Genteng, Surabaya City (Komerce Destination ID: 69237)
-const DEFAULT_ORIGIN_ID = process.env.RAJAONGKIR_ORIGIN_ID || "69237";
+// Alparfume Default Origin: Taman, Madiun City (Komerce Destination ID: 39901)
+const DEFAULT_ORIGIN_ID = process.env.RAJAONGKIR_ORIGIN_ID || "39901";
 
 interface KomerceCostItem {
   name: string;
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     const cleanCity = sanitizeStr(city);
     const cleanDistrict = sanitizeStr(district);
 
-    const parsedWeight = typeof weight === "number" && weight > 0 && weight <= 50000 ? weight : 500;
+    const parsedWeight = typeof weight === "number" && weight > 0 && weight <= 50000 ? weight : 1000;
     const weightKg = Math.max(1, Math.ceil(parsedWeight / 1000));
 
     const isDev = process.env.NODE_ENV === "development";
@@ -185,16 +185,12 @@ export async function POST(request: NextRequest) {
     // Default Tariff (for completely unrecognized locations)
     let baseTariff = { jnt: 22000, jne: 20000, sicepat: 19000, pos: 18000 };
 
-    // Overlap-safe matching hierarchy (checked from specific/near to broad/remote)
-    // RING 1: Gerbangkertosusila & Surabaya Raya (Checked FIRST to avoid "bangkalan" matching "bangka")
+    // RING 1: Karesidenan Madiun (Kota/Kab Madiun, Magetan, Ponorogo, Ngawi)
     if (
-      combinedLocation.includes("surabaya") ||
-      combinedLocation.includes("sidoarjo") ||
-      combinedLocation.includes("gresik") ||
-      combinedLocation.includes("mojokerto") ||
-      combinedLocation.includes("lamongan") ||
-      combinedLocation.includes("bangkalan") ||
-      combinedLocation.includes("pasuruan")
+      combinedLocation.includes("madiun") ||
+      combinedLocation.includes("magetan") ||
+      combinedLocation.includes("ponorogo") ||
+      combinedLocation.includes("ngawi")
     ) {
       baseTariff = { jnt: 9000, jne: 8000, sicepat: 8000, pos: 7000 };
     }
@@ -344,26 +340,29 @@ export async function POST(request: NextRequest) {
     ) {
       baseTariff = { jnt: 18000, jne: 16000, sicepat: 15000, pos: 14000 };
     }
-    // TIER 7: JAWA TIMUR (Luar Gerbangkertosusila)
+    // TIER 7: JAWA TIMUR (Luar Karesidenan Madiun)
     else if (
       combinedLocation.includes("jawa timur") ||
+      combinedLocation.includes("surabaya") ||
+      combinedLocation.includes("sidoarjo") ||
+      combinedLocation.includes("gresik") ||
+      combinedLocation.includes("mojokerto") ||
+      combinedLocation.includes("lamongan") ||
+      combinedLocation.includes("bangkalan") ||
+      combinedLocation.includes("pasuruan") ||
       combinedLocation.includes("malang") ||
       combinedLocation.includes("kediri") ||
-      combinedLocation.includes("madiun") ||
       combinedLocation.includes("jember") ||
       combinedLocation.includes("banyuwangi") ||
       combinedLocation.includes("tuban") ||
       combinedLocation.includes("probolinggo") ||
       combinedLocation.includes("blitar") ||
       combinedLocation.includes("tulungagung") ||
-      combinedLocation.includes("ngawi") ||
-      combinedLocation.includes("ponorogo") ||
       combinedLocation.includes("pacitan") ||
       combinedLocation.includes("bondowoso") ||
       combinedLocation.includes("situbondo") ||
       combinedLocation.includes("lumajang") ||
       combinedLocation.includes("nganjuk") ||
-      combinedLocation.includes("magetan") ||
       combinedLocation.includes("trenggalek") ||
       combinedLocation.includes("sampang") ||
       combinedLocation.includes("pamekasan") ||
