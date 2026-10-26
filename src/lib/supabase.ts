@@ -105,3 +105,12 @@ export interface Testimonial {
   } | null;
 }
 
+export interface SiteVisit {
+  id?: number;
+  session_id: string;
+  path: string;
+  referrer?: string | null;
+  device_type?: "mobile" | "tablet" | "desktop" | string;
+  created_at: string;
+}
+

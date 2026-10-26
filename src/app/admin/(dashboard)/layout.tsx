@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Loader2, FileText, RefreshCw, ImageIcon, ArrowLeft, Settings, LogOut, LayoutDashboard, Star } from "lucide-react";
+import { Loader2, FileText, RefreshCw, ImageIcon, ArrowLeft, Settings, LogOut, LayoutDashboard, Star, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -62,6 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const navItems = [
     { name: "Overview", path: "/admin/dashboard", icon: LayoutDashboard },
+    { name: "Analitik Kunjungan", path: "/admin/analytics", icon: BarChart3 },
     { name: "Daftar Pesanan", path: "/admin/orders", icon: FileText },
     { name: "Kelola Produk", path: "/admin/products", icon: RefreshCw },
     { name: "Kategori & Banner", path: "/admin/categories", icon: ImageIcon },

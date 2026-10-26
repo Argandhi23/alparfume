@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { CartProvider } from "@/context/CartContext";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -95,6 +96,7 @@ export default function RootLayout({
       <body className="font-sans bg-brandWhite text-brandBlack min-h-screen selection:bg-brandBlack selection:text-brandWhite">
         <ThemeProvider>
           <CartProvider>
+            <AnalyticsTracker />
             {children}
           </CartProvider>
         </ThemeProvider>
