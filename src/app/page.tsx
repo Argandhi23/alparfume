@@ -1,7 +1,8 @@
-import { supabase, ProductWithVariants } from "@/lib/supabase";
+import { supabase, ProductWithVariants, Testimonial } from "@/lib/supabase";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import HomePageClient from "@/components/HomePageClient";
+import { getLocalTestimonials } from "@/lib/testimonialsHelper";
 
 export const revalidate = 300;
 
@@ -65,11 +66,32 @@ async function getBanners() {
   }
 }
 
+async function getTestimonials(): Promise<Testimonial[]> {
+  try {
+    const { data, error } = await supabase
+      .from("testimonials")
+      .select("id, customer_name, rating, product_id, product_name_override, review_text, tag, image_url, is_verified_buyer, is_active, sort_order, created_at, products(id, name, slug, image_url)")
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      return data as unknown as Testimonial[];
+    }
+  } catch (err) {
+    console.warn("Notice: Fetching testimonials from local fallback:", err);
+  }
+
+  const local = getLocalTestimonials();
+  return local.filter((t) => t.is_active !== false);
+}
+
 export default async function Home() {
-  const [products, categories, banners] = await Promise.all([
+  const [products, categories, banners, testimonials] = await Promise.all([
     getProducts(),
     getCategories(),
     getBanners(),
+    getTestimonials(),
   ]);
 
   return (
@@ -80,6 +102,7 @@ export default async function Home() {
           products={products}
           categories={categories}
           banners={banners}
+          testimonials={testimonials}
         />
       </main>
       <Footer />

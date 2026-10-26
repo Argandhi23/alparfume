@@ -4,16 +4,19 @@ import { useState } from "react";
 import HeroSlider from "./HeroSlider";
 import CategoryGrid from "./CategoryGrid";
 import ProductGrid from "./ProductGrid";
-import { ProductWithVariants, Category, Banner } from "@/lib/supabase";
+import TestimonialsSection from "./TestimonialsSection";
+import { ProductWithVariants, Category, Banner, Testimonial } from "@/lib/supabase";
+import { DEFAULT_TESTIMONIALS } from "@/data/testimonials";
 import { Search, X } from "lucide-react";
 
 interface HomePageClientProps {
   products: ProductWithVariants[];
   categories: Category[];
   banners: Banner[];
+  testimonials?: Testimonial[];
 }
 
-export default function HomePageClient({ products, categories, banners }: HomePageClientProps) {
+export default function HomePageClient({ products, categories, banners, testimonials }: HomePageClientProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   // Separate available and sold-out products
@@ -110,6 +113,11 @@ export default function HomePageClient({ products, categories, banners }: HomePa
           <ProductGrid products={displayProducts} />
         )}
       </section>
+
+      {/* Testimonials / Rating Section (Tepat di bawah Best Seller ketika tidak sedang melakukan pencarian) */}
+      {!normalizedQuery && (
+        <TestimonialsSection testimonials={testimonials || DEFAULT_TESTIMONIALS} />
+      )}
 
       {/* Separator / Sekat Stok Habis */}
       {!normalizedQuery && soldOutProducts.length > 0 && (

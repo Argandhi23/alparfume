@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { Loader2, FileText, RefreshCw, ImageIcon, ArrowLeft, Settings, LogOut, LayoutDashboard } from "lucide-react";
+import { Loader2, FileText, RefreshCw, ImageIcon, ArrowLeft, Settings, LogOut, LayoutDashboard, Star } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -65,6 +65,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: "Daftar Pesanan", path: "/admin/orders", icon: FileText },
     { name: "Kelola Produk", path: "/admin/products", icon: RefreshCw },
     { name: "Kategori & Banner", path: "/admin/categories", icon: ImageIcon },
+    { name: "Ulasan Pelanggan", path: "/admin/testimonials", icon: Star },
   ];
 
   return (

@@ -81,3 +81,27 @@ export interface OrderIntent {
   order_code?: string | null;
   created_at: string;
 }
+
+export interface Testimonial {
+  id: string;
+  customer_name: string;
+  customer_avatar_url?: string | null;
+  rating: number;
+  product_id?: string | null;
+  product_name_override?: string | null;
+  review_text: string;
+  tag?: string | null;
+  image_url?: string | null;
+  is_verified_buyer?: boolean;
+  is_active?: boolean;
+  sort_order?: number;
+  created_at?: string;
+  // Relational join with products
+  products?: {
+    id: string;
+    name: string;
+    slug: string;
+    image_url?: string | null;
+  } | null;
+}
+
