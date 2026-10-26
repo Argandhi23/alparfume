@@ -415,6 +415,23 @@ export default function OrdersPage() {
     return { label: sizeMl ? `${sizeMl}ml` : "30ml", tagClass: "bg-neutral-100 text-neutral-700 border-neutral-200" };
   };
 
+  const getWaStatus = (notes?: string | null): "sent" | "failed" | "unconfigured" | "pending" | null => {
+    if (!notes) return null;
+    if (notes.includes("[WA: Terkirim]")) return "sent";
+    if (notes.includes("[WA: Gagal")) return "failed";
+    if (notes.includes("[WA: Belum Dikonfigurasi]")) return "unconfigured";
+    if (notes.includes("[WA: Belum Terkirim]")) return "pending";
+    return null;
+  };
+
+  const getCleanCustomerNote = (notes?: string | null): string => {
+    if (!notes) return "";
+    return notes
+      .replace(/\|\s*\[WA:[^\]]+\]/g, "")
+      .replace(/\[WA:[^\]]+\]/g, "")
+      .trim();
+  };
+
   const buildCustomerWaConfirmationMessage = (intent: OrderIntent): string => {
     const origin = typeof window !== "undefined" ? window.location.origin : "https://alparfume.com";
     const trackingUrl = `${origin}/orders/${intent.order_code || intent.id}`;
@@ -1406,21 +1423,53 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                       </td>
 
                       {/* Customer Info */}
-                      <td className="py-4 px-4 align-top space-y-1">
+                      <td className="py-4 px-4 align-top space-y-1.5">
                         <div className="font-bold text-neutral-900 text-xs">{int.customer_name || "Pelanggan"}</div>
                         {int.customer_wa && (
-                          <a
-                            href={`https://api.whatsapp.com/send?phone=${formatWaForUrl(int.customer_wa)}&text=${encodeURIComponent(
-                              buildCustomerWaConfirmationMessage(int)
-                            )}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[11px] font-bold transition-colors shadow-xs"
-                            title="Klik untuk kirim pesan konfirmasi pesanan ke WhatsApp"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Chat WA ({int.customer_wa})</span>
-                          </a>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <a
+                                href={`https://api.whatsapp.com/send?phone=${formatWaForUrl(int.customer_wa)}&text=${encodeURIComponent(
+                                  buildCustomerWaConfirmationMessage(int)
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-[11px] font-bold transition-colors shadow-xs"
+                                title="Klik untuk kirim atau kirim ulang konfirmasi pesanan ke WhatsApp"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>Chat WA ({int.customer_wa})</span>
+                              </a>
+                            </div>
+
+                            {/* Status Pengiriman WA Otomatis */}
+                            {(() => {
+                              const waStatus = getWaStatus(int.order_notes);
+                              if (waStatus === "sent") {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    WA Otomatis Terkirim
+                                  </span>
+                                );
+                              }
+                              if (waStatus === "failed") {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-rose-50 text-rose-700 border border-rose-200" title={int.order_notes || "Gagal kirim via gateway"}>
+                                    ⚠ WA Otomatis Gagal
+                                  </span>
+                                );
+                              }
+                              if (waStatus === "unconfigured") {
+                                return (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200" title="Token Fonnte belum diset di .env.local">
+                                    Token WA Belum Diset
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
                         )}
                         {int.customer_address && (
                           <p className="text-[10px] text-neutral-500 line-clamp-2 max-w-[200px]" title={int.customer_address}>
@@ -1469,11 +1518,14 @@ Mohon konfirmasinya ya Kak jika data pesanan di atas sudah sesuai. Terima kasih 
                             })()
                           )}
                         </div>
-                        {int.order_notes && (
-                          <div className="text-[10px] bg-amber-50 border border-amber-200 text-amber-900 p-2 rounded-xl font-medium">
-                            📝 <strong>Catatan Pembeli:</strong> {int.order_notes}
-                          </div>
-                        )}
+                        {(() => {
+                          const cleanNote = getCleanCustomerNote(int.order_notes);
+                          return cleanNote ? (
+                            <div className="text-[10px] bg-amber-50 border border-amber-200 text-amber-900 p-2 rounded-xl font-medium">
+                              📝 <strong>Catatan Pembeli:</strong> {cleanNote}
+                            </div>
+                          ) : null;
+                        })()}
                         <div className="font-extrabold text-sm text-black font-plus-jakarta pt-1 flex items-center justify-between">
                           <span className="text-[10px] text-neutral-400 uppercase tracking-wider font-bold">Total Transaksi:</span>
                           <span>{formatRupiah(effectiveTotalPrice)}</span>

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rateLimit";
 import { validateServerCourierCost } from "@/lib/shippingTariff";
+import { buildOrderConfirmationMessage, sendFonnteMessage } from "@/lib/whatsappGateway";
 
 interface ProductVariant {
   id: string; // UUID
@@ -343,6 +344,61 @@ export async function POST(request: NextRequest) {
 
     if (itemsErr) {
       console.error("Error inserting order_items into DB:", itemsErr);
+    }
+
+    // 9. Send Automated WhatsApp Confirmation via Fonnte (Defensive & Non-Blocking)
+    let waStatusTag = "[WA: Belum Terkirim]";
+    try {
+      const originHeader = request.headers.get("origin") || request.headers.get("host") || "";
+      const originUrl = originHeader.startsWith("http") ? originHeader : originHeader ? `https://${originHeader}` : "https://alparfume.com";
+
+      const waMessage = buildOrderConfirmationMessage({
+        customerName: sanitizedCustomerName,
+        orderCode: createdOrder.order_code,
+        items: validatedItems.map((item) => ({
+          productName: item.productName,
+          sizeMl: item.sizeMl,
+          quantity: item.quantity,
+          price: item.price,
+          totalItemPrice: item.totalItemPrice,
+        })),
+        grandTotal: serverGrandTotal,
+        subtotal: serverSubtotal,
+        shippingCost: validatedShippingCost,
+        paymentMethod: paymentMethod,
+        deliveryMethod: deliveryMethod,
+        customerAddress: sanitizedAddress,
+        originUrl: originUrl,
+      });
+
+      const waResult = await sendFonnteMessage(sanitizedWa, waMessage);
+
+      if (waResult.success) {
+        waStatusTag = "[WA: Terkirim]";
+      } else if (waResult.statusText === "unconfigured") {
+        waStatusTag = "[WA: Belum Dikonfigurasi]";
+      } else {
+        waStatusTag = `[WA: Gagal - ${waResult.error || waResult.statusText}]`;
+      }
+
+      // Update order_notes with WA status tag for immediate visibility in admin
+      const currentNotes = sanitizedOrderNotes ? `${sanitizedOrderNotes} | ${waStatusTag}` : waStatusTag;
+      await serviceClient
+        .from("orders")
+        .update({ order_notes: currentNotes })
+        .eq("id", createdOrder.id);
+
+      // Audit Log in order_status_log
+      await serviceClient
+        .from("order_status_log")
+        .insert([{
+          order_id: createdOrder.id,
+          status_type: "wa_notification",
+          status_value: waResult.success ? "sent" : (waResult.statusText || "failed"),
+          changed_by: "system_fonnte",
+        }]);
+    } catch (waErr) {
+      console.error("[Fonnte] Error during automated WA dispatch:", waErr);
     }
 
     // Format response compatible with frontend expected response
