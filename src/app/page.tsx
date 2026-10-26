@@ -3,7 +3,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import HomePageClient from "@/components/HomePageClient";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 async function getProducts() {
   try {

@@ -15,6 +15,7 @@ import {
   MapPin,
   QrCode,
   FileText,
+  Trash2,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -22,6 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCart, CartItem } from "@/context/CartContext";
 import { supabase, ProductWithVariants, ProductVariant } from "@/lib/supabase";
 import { sanitizeImageUrl } from "@/lib/imageHelper";
+import { calculateFallbackShippingRates, STORE_PICKUP_INFO } from "@/lib/shippingTariff";
 
 interface RegionOption {
   province_id?: string;
@@ -52,7 +54,7 @@ const DEFAULT_COURIERS: CourierOption[] = [
 export function CheckoutClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { items: cartItems, clearCart } = useCart();
+  const { items: cartItems, clearCart, removeFromCart } = useCart();
 
   // Direct buy parameter support from URL query string fallback
   const directProductSlug = searchParams.get("slug");
@@ -62,6 +64,42 @@ export function CheckoutClient() {
   const [directProduct, setDirectProduct] = useState<ProductWithVariants | null>(null);
   const [directVariant, setDirectVariant] = useState<ProductVariant | null>(null);
   const [loadingDirectProduct, setLoadingDirectProduct] = useState(!!directProductSlug);
+  const [liveVariantPrices, setLiveVariantPrices] = useState<Record<string, number>>({});
+
+  // Sync cart item prices once against live Supabase DB so manipulated/stale localStorage prices are corrected immediately
+  useEffect(() => {
+    const slugs = Array.from(new Set(cartItems.map((i) => i.productSlug).filter(Boolean)));
+    if (slugs.length === 0) return;
+
+    let active = true;
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from("products")
+          .select("slug, product_variants(size_ml, price)")
+          .in("slug", slugs);
+
+        if (active && Array.isArray(data)) {
+          const priceMap: Record<string, number> = {};
+          for (const prod of data) {
+            const variants = Array.isArray(prod.product_variants) ? prod.product_variants : [];
+            for (const v of variants) {
+              if (prod.slug && typeof v.size_ml === "number" && typeof v.price === "number" && v.price > 0) {
+                priceMap[`${prod.slug}-${v.size_ml}`] = v.price;
+              }
+            }
+          }
+          setLiveVariantPrices(priceMap);
+        }
+      } catch {
+        // Non-blocking; server-side /api/orders/create still enforces strict DB pricing
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [cartItems]);
 
   // Fetch direct product if requested via query string and cart is empty
   useEffect(() => {
@@ -93,7 +131,11 @@ export function CheckoutClient() {
 
   const isCartMode = cartItems.length > 0 || !directProduct;
   const checkoutItems: CartItem[] = isCartMode
-    ? cartItems
+    ? cartItems.map((item) => {
+        const key = `${item.productSlug}-${item.sizeMl}`;
+        const livePrice = liveVariantPrices[key];
+        return livePrice ? { ...item, price: livePrice } : item;
+      })
     : directProduct && directVariant
     ? [
         {
@@ -111,6 +153,16 @@ export function CheckoutClient() {
         },
       ]
     : [];
+
+  const handleRemoveItem = (itemId: string) => {
+    if (isCartMode) {
+      removeFromCart(itemId);
+    } else {
+      setDirectProduct(null);
+      setDirectVariant(null);
+      router.replace("/checkout");
+    }
+  };
 
   // Delivery & Customer Form State
   const [deliveryMethod, setDeliveryMethod] = useState<"courier" | "pickup">("courier");
@@ -194,29 +246,39 @@ export function CheckoutClient() {
   const itemTotal = checkoutItems.reduce((total, item) => total + item.price * item.quantity, 0);
   const totalWeightGrams = Math.max(1000, totalQuantity * 1000);
 
-  // Auto calculate ongkir
+  // Auto calculate ongkir (with immediate regional floor update so rates never stay at default Rp12.000)
   useEffect(() => {
     if (deliveryMethod !== "courier") return;
     if (!selectedProvince || !cityDistrict || !selectedKecamatan) return;
 
+    const provName = String(selectedProvince?.province || selectedProvince?.name || "");
+    const cityName = String(cityDistrict?.city_name || cityDistrict?.name || "");
+    const distName = String(selectedKecamatan?.name || "");
+    const weightKg = Math.max(1, Math.ceil(totalWeightGrams / 1000));
+
+    // Immediately set safe regional baseline while live API calculates
+    const baselineRates = calculateFallbackShippingRates(provName, cityName, distName, weightKg);
+    setCourierOptions(baselineRates);
+    setSelectedCourier((prev) => baselineRates.find((c) => c.id === prev.id) || baselineRates[0]);
+    setCalculatingOngkir(true);
+
     const timer = setTimeout(async () => {
-      setCalculatingOngkir(true);
       try {
         const res = await fetch("/api/shipping/cost", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            province: selectedProvince?.province || selectedProvince?.name,
-            city: cityDistrict?.city_name || cityDistrict?.name,
+            province: provName,
+            city: cityName,
             cityId: cityDistrict?.city_id || cityDistrict?.id,
-            district: selectedKecamatan?.name,
+            district: distName,
             weight: totalWeightGrams,
           }),
         });
 
         if (res.ok) {
           const data = await res.json();
-          if (data.success && Array.isArray(data.rates)) {
+          if (data.success && Array.isArray(data.rates) && data.rates.length > 0) {
             setCourierOptions(data.rates);
             setSelectedCourier((prev) => data.rates.find((c: CourierOption) => c.id === prev.id) || data.rates[0]);
           }
@@ -271,7 +333,7 @@ export function CheckoutClient() {
 
       const fullAddressString =
         deliveryMethod === "pickup"
-          ? "AMBIL DI TOKO (COD) - Dekat Jl. Mego Manis II No.10, Manisrejo, Kec. Taman, Kota Madiun, Jawa Timur 63138"
+          ? `AMBIL DI TOKO (COD) - ${STORE_PICKUP_INFO.shortAddress}`
           : `${customerAddress.trim().slice(0, 1000)}, Kec. ${selectedKecamatan?.name || "-"}, ${
               cityDistrict?.type || ""
             } ${cityDistrict?.city_name || cityDistrict?.name || "-"}, ${
@@ -343,39 +405,21 @@ export function CheckoutClient() {
         return;
       }
 
-      // Decrement product stock
-      try {
-        for (const item of checkoutItems) {
-          if (!item.productSlug) continue;
-          const { data: prodData } = await supabase
-            .from("products")
-            .select("stock")
-            .eq("slug", item.productSlug)
-            .single();
-
-          if (prodData && typeof prodData.stock === "number") {
-            const nextStock = Math.max(0, prodData.stock - item.quantity);
-            await supabase
-              .from("products")
-              .update({ stock: nextStock })
-              .eq("slug", item.productSlug);
-          }
-        }
-      } catch (stockErr) {
-        console.error("Gagal mengurangi stok:", stockErr);
-      }
-
       const orderIdToUse = finalOrderId || Date.now();
+      const verifiedSubtotal = Number(resJson.data?.subtotal) || itemTotal;
+      const verifiedShipping =
+        resJson.data?.shipping_cost !== undefined ? Number(resJson.data.shipping_cost) : shippingCost;
+      const verifiedGrandTotal = Number(resJson.data?.grand_total) || grandTotal;
 
-      // Save order receipt in localStorage for instant tracking
+      // Save order receipt in localStorage for instant tracking (using server-verified prices)
       const localOrderReceipt = {
         id: orderIdToUse,
         product_name: finalProductName,
         size_ml: finalSizeMl,
         quantity: totalQuantity,
-        price: itemTotal,
-        grandTotal,
-        shippingCost,
+        price: verifiedSubtotal,
+        grandTotal: verifiedGrandTotal,
+        shippingCost: verifiedShipping,
         courierName: courierNameString,
         customerName: cleanName,
         customerWa: cleanWa,
@@ -856,6 +900,16 @@ export function CheckoutClient() {
                         </p>
                         <p className="text-xs font-bold mt-1">{formatRupiah(item.price * item.quantity)}</p>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 transition-colors p-2 rounded-xl flex-shrink-0 cursor-pointer"
+                        title="Hapus dari pesanan"
+                        aria-label={`Hapus ${item.productName}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -886,13 +940,18 @@ export function CheckoutClient() {
                 {/* Submit Action Button */}
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || (deliveryMethod === "courier" && calculatingOngkir)}
                   className="w-full bg-[var(--foreground)] hover:opacity-95 text-[var(--background)] py-4 rounded-full font-bold text-xs uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer font-sans disabled:opacity-50"
                 >
                   {submitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Memproses Pesanan...
+                    </>
+                  ) : deliveryMethod === "courier" && calculatingOngkir ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Menghitung Ongkos Kirim...
                     </>
                   ) : (
                     <>

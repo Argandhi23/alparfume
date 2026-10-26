@@ -9,7 +9,7 @@ import { ArrowLeft } from "lucide-react";
 import { notFound } from "next/navigation";
 import { parseProductImages } from "@/lib/imageHelper";
 
-export const revalidate = 60;
+export const revalidate = 300;
 
 interface ProductPageProps {
   params: Promise<{

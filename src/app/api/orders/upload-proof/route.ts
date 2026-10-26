@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
           const base64Data = proofUrl.split(",")[1];
           if (base64Data) {
             const buffer = Buffer.from(base64Data, "base64");
-            const fileName = `proof_${targetOrder.id}_${Date.now()}.jpg`;
+            // Deterministic filename per order with upsert:true so re-uploads overwrite the old file (saves Supabase Free Tier Storage)
+            const fileName = `proof_${targetOrder.id}.jpg`;
 
             const { data: uploadData, error: uploadErr } = await serviceClient.storage
               .from("payment-proofs")
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
                 .getPublicUrl(fileName);
 
               if (urlData?.publicUrl) {
-                storagePublicUrl = urlData.publicUrl;
+                storagePublicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
               }
             }
           }
@@ -108,6 +109,12 @@ export async function POST(request: NextRequest) {
       }
 
       const finalProofUrlToSave = storagePublicUrl || proofUrl;
+
+      // Replace previous unverified proof row for this order to prevent database bloat on re-upload
+      await serviceClient
+        .from("payment_proofs")
+        .delete()
+        .eq("order_id", targetOrder.id);
 
       // Insert record into payment_proofs table (Single Source of Truth)
       const { error: proofInsertErr } = await serviceClient

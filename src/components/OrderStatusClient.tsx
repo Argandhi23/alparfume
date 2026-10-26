@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase, OrderIntent } from "@/lib/supabase";
+import { OrderIntent } from "@/lib/supabase";
+import { generateDynamicQrisTemplateDataUrl, ALPARFUME_MERCHANT_INFO } from "@/lib/qris";
+import { STORE_PICKUP_INFO } from "@/lib/shippingTariff";
 import { 
   CheckCircle2, Clock, Truck, Store, Copy, Upload, Loader2, MapPin, 
-  PackageCheck, Package, Check, ZoomIn, X, AlertCircle, ExternalLink
+  PackageCheck, Package, Check, ZoomIn, X, AlertCircle, ExternalLink,
+  Download, RefreshCw
 } from "lucide-react";
 import Image from "next/image";
 
@@ -68,6 +71,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [isQrisZoomed, setIsQrisZoomed] = useState(false);
+  const [dynamicQrisUrl, setDynamicQrisUrl] = useState<string | null>(null);
 
   // Poll database for real-time status & resi updates via secure server API route
   const fetchOrderFromDb = useCallback(async () => {
@@ -122,42 +126,29 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
       }
     }
 
-    // 2. Initial fetch & setup polling every 3 seconds for instant live updates
+    // 2. Smart Visibility-Aware Polling (Protects Supabase Free Tier Egress & Connection Limits)
+    // Polls every 10s ONLY when browser tab is active, and refreshes immediately when user returns from M-Banking app
     fetchOrderFromDb();
     const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       fetchOrderFromDb();
-    }, 3000);
+    }, 10000);
 
-    // 3. Supabase Realtime Subscription for instant status updates from Admin
-    const channel = supabase
-      .channel(`order_live_${orderId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "orders",
-        },
-        () => {
-          fetchOrderFromDb();
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "order_intents",
-        },
-        () => {
-          fetchOrderFromDb();
-        }
-      )
-      .subscribe();
+    const handleVisibilityOrFocus = () => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        fetchOrderFromDb();
+      }
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(channel);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
     };
   }, [orderId, initialOrder, fetchOrderFromDb]);
 
@@ -418,7 +409,30 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
   const shippingCost = Number(itemsMeta.shipping_cost || order?.shipping_cost || 0);
   const grandTotal = Number(itemsMeta.grand_total || order?.total_price || order?.price || (subtotal + shippingCost));
 
-  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent("Store AL Parfume, Jl. Teratai No. 45, Madiun, Jawa Timur")}`;
+  useEffect(() => {
+    if (!isMounted || grandTotal <= 0) return;
+    let cancelled = false;
+    generateDynamicQrisTemplateDataUrl(grandTotal)
+      .then((url) => {
+        if (!cancelled) setDynamicQrisUrl(url);
+      })
+      .catch((err) => console.warn("Gagal membuat QRIS dinamis:", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [isMounted, grandTotal]);
+
+  const handleDownloadQris = () => {
+    const targetUrl = dynamicQrisUrl || "/qris.jpg";
+    const link = document.createElement("a");
+    link.href = targetUrl;
+    link.download = `QRIS-ALPARFUME-${formattedCode}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(STORE_PICKUP_INFO.mapsQuery)}`;
 
   const renderPickupStoreCard = () => (
     <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-4">
@@ -437,12 +451,12 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
         <div className="font-semibold text-brandBlack group-hover:text-black flex items-center justify-between gap-1.5">
           <span className="flex items-center gap-1.5">
             <MapPin className="w-4 h-4 text-emerald-600 shrink-0" />
-            Store AL Parfume Madiun
+            {STORE_PICKUP_INFO.name}
           </span>
           <ExternalLink className="w-3.5 h-3.5 text-neutral-400 group-hover:text-black transition-colors shrink-0" />
         </div>
         <p className="text-neutral-500 group-hover:text-neutral-700 text-[11px] leading-snug pl-5 underline underline-offset-2 decoration-neutral-300 group-hover:decoration-neutral-600">
-          Jl. Teratai No. 45, Madiun, Jawa Timur (Buka Setiap Hari 09.00 - 21.00 WIB)
+          {STORE_PICKUP_INFO.shortAddress} ({STORE_PICKUP_INFO.hours})
         </p>
       </a>
     </div>
@@ -564,31 +578,49 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
             <>
               {/* Regular QRIS Upload Box */}
               <div className="bg-white border border-brandBorder p-6 rounded-2xl space-y-5">
-                <div className="border-b pb-3">
+                <div className="border-b pb-3 space-y-1">
                   <h3 className="font-bold text-sm uppercase tracking-wider text-brandBlack">
                     Pembayaran QRIS
                   </h3>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    Scan QRIS di bawah ini dengan E-Wallet/Mobile Banking Anda.
+                  <p className="text-xs text-neutral-500">
+                    Scan QRIS di bawah ini. Tagihan otomatis muncul sesuai total pesanan Anda.
                   </p>
                 </div>
 
-                {/* QRIS Image Code */}
-                <div className="relative group bg-neutral-50 p-4 border rounded-xl flex flex-col items-center justify-center">
-                  <Image
-                    src="/qris.jpg"
-                    alt="QRIS Al Parfume"
-                    width={200}
-                    height={200}
-                    className="rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
-                    onClick={() => setIsQrisZoomed(true)}
-                  />
-                  <button
-                    onClick={() => setIsQrisZoomed(true)}
-                    className="mt-2 text-[10px] text-neutral-500 hover:text-black font-semibold flex items-center gap-1 uppercase tracking-wider"
-                  >
-                    <ZoomIn className="w-3 h-3" /> Perbesar QRIS
-                  </button>
+                {/* Plain Dynamic QRIS Image Code + Tagihan */}
+                <div className="relative group bg-white p-3 border border-neutral-200 rounded-2xl flex flex-col items-center justify-center space-y-3">
+                  {dynamicQrisUrl ? (
+                    <Image
+                      src={dynamicQrisUrl}
+                      alt="QRIS ALPARFUME.CO"
+                      width={240}
+                      height={272}
+                      unoptimized
+                      className="rounded-xl object-contain cursor-pointer hover:opacity-95 transition-opacity bg-white"
+                      onClick={() => setIsQrisZoomed(true)}
+                    />
+                  ) : (
+                    <div className="w-[240px] h-[272px] flex items-center justify-center">
+                      <Loader2 className="w-6 h-6 animate-spin text-neutral-400" />
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 w-full pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsQrisZoomed(true)}
+                      className="py-2 px-3 bg-neutral-50 hover:bg-neutral-100 border border-neutral-200 text-neutral-800 rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" /> Perbesar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadQris}
+                      className="py-2 px-3 bg-black hover:bg-neutral-800 text-white rounded-xl text-[10px] font-bold flex items-center justify-center gap-1.5 uppercase tracking-wider transition-colors cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" /> Unduh QRIS
+                    </button>
+                  </div>
                 </div>
 
                 {/* Proof Image Upload Box */}
@@ -611,8 +643,28 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-semibold bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
                         <CheckCircle2 className="w-4 h-4 shrink-0" />
-                        Bukti transfer tersimpan & menunggu verifikasi admin.
+                        {isPaid
+                          ? "Pembayaran telah diverifikasi LUNAS oleh Admin."
+                          : "Bukti transfer tersimpan & menunggu verifikasi admin."}
                       </div>
+
+                      {!isPaid && !isCompleted && (
+                        <label className="w-full py-2 px-3 bg-neutral-100 hover:bg-neutral-200 border border-neutral-300 text-neutral-700 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                          {uploadingProof ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3.5 h-3.5" />
+                          )}
+                          <span>{uploadingProof ? "Mengunggah Ulang..." : "Salah Foto? Ganti Bukti Transfer"}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleFileUpload}
+                            disabled={uploadingProof}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
                     </div>
                   ) : (
                     <div>
@@ -626,7 +678,7 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
                           {uploadingProof ? "Mengompres & Mengunggah..." : "Pilih Foto Bukti Transfer"}
                         </span>
                         <span className="text-[10px] text-neutral-400">
-                          Format JPG, PNG (Otomatis Diompres)
+                          Format JPG, PNG (Otomatis Dikompres)
                         </span>
                         <input
                           type="file"
@@ -753,18 +805,38 @@ export default function OrderStatusClient({ orderId, initialOrder }: OrderStatus
               <X className="w-5 h-5" />
             </button>
             <div className="text-center">
-              <h4 className="font-bold text-sm uppercase tracking-wider text-brandBlack">Scan QRIS AL Parfume</h4>
-              <p className="text-xs text-neutral-500 mt-1">Gunakan E-Wallet atau M-Banking</p>
+              <h4 className="font-bold text-sm uppercase tracking-wider text-brandBlack">
+                QRIS {ALPARFUME_MERCHANT_INFO.name}
+              </h4>
             </div>
             <div className="bg-white p-2 border rounded-2xl flex justify-center">
-              <Image src="/qris.jpg" alt="QRIS Zoom" width={320} height={320} unoptimized className="rounded-xl object-contain" />
+              {dynamicQrisUrl && (
+                <Image
+                  src={dynamicQrisUrl}
+                  alt="QRIS Zoom"
+                  width={320}
+                  height={362}
+                  unoptimized
+                  className="rounded-xl object-contain max-h-[60vh] w-auto"
+                />
+              )}
             </div>
-            <button
-              onClick={() => setIsQrisZoomed(false)}
-              className="w-full py-2.5 bg-black text-white font-semibold text-xs rounded-xl uppercase tracking-wider"
-            >
-              Tutup
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleDownloadQris}
+                className="w-full py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-900 font-semibold text-xs rounded-xl uppercase tracking-wider flex items-center justify-center gap-1.5"
+              >
+                <Download className="w-4 h-4" /> Unduh QRIS
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsQrisZoomed(false)}
+                className="w-full py-2.5 bg-black text-white font-semibold text-xs rounded-xl uppercase tracking-wider"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

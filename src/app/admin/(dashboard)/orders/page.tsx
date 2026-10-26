@@ -116,10 +116,25 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchIntents(intentsPage);
+    // Visibility-aware 30s polling to protect Supabase Free Tier Egress bandwidth
     const interval = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        return;
+      }
       fetchIntents(intentsPage, true);
-    }, 15000);
-    return () => clearInterval(interval);
+    }, 30000);
+
+    const handleVisibility = () => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        fetchIntents(intentsPage, true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [intentsPage, fetchIntents]);
 
   const handleDeleteProof = async (intent: OrderIntent) => {

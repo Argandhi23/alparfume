@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit } from "@/lib/rateLimit";
+import { validateServerCourierCost } from "@/lib/shippingTariff";
 
 interface ProductVariant {
   id: string; // UUID
@@ -14,6 +15,9 @@ interface ProductWithVariants {
   id: string;
   name: string;
   slug: string;
+  is_active?: boolean;
+  is_sold_out?: boolean;
+  stock?: number;
   product_variants?: ProductVariant[];
 }
 
@@ -129,82 +133,141 @@ export async function POST(request: NextRequest) {
 
     const productsList: ProductWithVariants[] = Array.isArray(dbProducts) ? dbProducts : [];
 
-    // 2. Server-Side Price Calculation per Item
+    // 2. Server-Side Price & Stock Verification per Item
     let serverSubtotal = 0;
-    const validatedItems = rawItems.map((item) => {
+    let totalItemQuantity = 0;
+    const validatedItems: {
+      productName: string;
+      productSlug: string;
+      sizeMl: number;
+      quantity: number;
+      price: number;
+      totalItemPrice: number;
+      variantId: string | null;
+    }[] = [];
+
+    for (const item of rawItems) {
       const itemSlug = String(item.productSlug || item.slug || "").trim().toLowerCase();
       const itemName = String(item.productName || item.name || cleanPayload.product_name || "").trim();
       const isSampleProduct = itemName.toLowerCase().includes("sample") || itemSlug.includes("sample");
       const defaultSize = isSampleProduct ? 10 : 30;
       const rawSize = Number(item.sizeMl || item.size_ml);
       const itemSize = (isSampleProduct || (rawSize > 0 && rawSize <= 15)) ? 10 : (rawSize || defaultSize);
-      const itemQty = Math.max(1, Math.floor(Number(item.quantity || item.qty) || 1));
+      const itemQty = Math.max(1, Math.min(100, Math.floor(Number(item.quantity || item.qty) || 1)));
 
       let matchedUnitPrice = 0;
       let matchedVariantId: string | null = null;
+      let resolvedSizeMl = itemSize;
 
       // Find matching product in database
-      const matchedProduct = productsList.find((p) => 
-        (itemSlug && p.slug?.toLowerCase() === itemSlug) || 
-        (p.name && p.name.toLowerCase() === itemName.toLowerCase())
+      const matchedProduct = productsList.find(
+        (p) =>
+          (itemSlug && p.slug?.toLowerCase() === itemSlug) ||
+          (p.name && p.name.toLowerCase() === itemName.toLowerCase())
       );
 
-      if (matchedProduct && matchedProduct.product_variants && matchedProduct.product_variants.length > 0) {
-        const matchedVariant = matchedProduct.product_variants.find(
-          (v) => Number(v.size_ml) === itemSize
-        ) || matchedProduct.product_variants[0];
+      if (matchedProduct) {
+        // Guard 1: Reject inactive or sold-out products before order creation
+        if (matchedProduct.is_active === false || matchedProduct.is_sold_out === true) {
+          return NextResponse.json(
+            { error: `Maaf, produk "${matchedProduct.name}" sedang habis (Sold Out).` },
+            { status: 400 }
+          );
+        }
 
-        if (matchedVariant) {
-          if (typeof matchedVariant.price === "number") {
-            matchedUnitPrice = matchedVariant.price;
+        if (typeof matchedProduct.stock === "number" && matchedProduct.stock < itemQty) {
+          return NextResponse.json(
+            {
+              error:
+                matchedProduct.stock <= 0
+                  ? `Maaf, stok untuk produk "${matchedProduct.name}" sudah habis.`
+                  : `Maaf, stok untuk produk "${matchedProduct.name}" hanya tersisa ${matchedProduct.stock} pcs.`,
+            },
+            { status: 400 }
+          );
+        }
+
+        if (matchedProduct.product_variants && matchedProduct.product_variants.length > 0) {
+          // Prefer exact size match; otherwise pick closest size (preferring higher price on tie to prevent underpricing)
+          const exactVariant = matchedProduct.product_variants.find(
+            (v) => Number(v.size_ml) === itemSize
+          );
+          const closestVariant = [...matchedProduct.product_variants].sort((a, b) => {
+            const diffA = Math.abs(Number(a.size_ml) - itemSize);
+            const diffB = Math.abs(Number(b.size_ml) - itemSize);
+            if (diffA !== diffB) return diffA - diffB;
+            return (Number(b.price) || 0) - (Number(a.price) || 0);
+          })[0];
+
+          const matchedVariant = exactVariant || closestVariant;
+
+          if (matchedVariant) {
+            if (typeof matchedVariant.stock === "number" && matchedVariant.stock < itemQty) {
+              return NextResponse.json(
+                {
+                  error:
+                    matchedVariant.stock <= 0
+                      ? `Maaf, varian "${matchedProduct.name}" (${matchedVariant.size_ml}ml) sedang habis.`
+                      : `Maaf, stok "${matchedProduct.name}" (${matchedVariant.size_ml}ml) hanya tersisa ${matchedVariant.stock} pcs.`,
+                },
+                { status: 400 }
+              );
+            }
+
+            if (typeof matchedVariant.price === "number" && matchedVariant.price > 0) {
+              matchedUnitPrice = matchedVariant.price;
+            }
+            matchedVariantId = matchedVariant.id;
+            resolvedSizeMl = Number(matchedVariant.size_ml) || itemSize;
           }
-          matchedVariantId = matchedVariant.id;
         }
       }
 
-      // Safety fallback
+      // Safety fallback if product/variant had no price in DB
       if (matchedUnitPrice <= 0) {
-        if (isSampleProduct || itemSize <= 15) matchedUnitPrice = 25000;
-        else if (itemSize === 30) matchedUnitPrice = 45000;
-        else if (itemSize === 50) matchedUnitPrice = 75000;
-        else if (itemSize === 100) matchedUnitPrice = 135000;
+        if (isSampleProduct || resolvedSizeMl <= 15) matchedUnitPrice = 25000;
+        else if (resolvedSizeMl === 30) matchedUnitPrice = 45000;
+        else if (resolvedSizeMl === 50) matchedUnitPrice = 75000;
+        else if (resolvedSizeMl === 100) matchedUnitPrice = 135000;
         else matchedUnitPrice = 45000;
       }
 
       const itemTotal = matchedUnitPrice * itemQty;
       serverSubtotal += itemTotal;
+      totalItemQuantity += itemQty;
 
-      return {
-        productName: itemName,
+      validatedItems.push({
+        productName: matchedProduct?.name || itemName,
         productSlug: matchedProduct?.slug || itemSlug,
-        sizeMl: itemSize,
+        sizeMl: resolvedSizeMl,
         quantity: itemQty,
         price: matchedUnitPrice,
         totalItemPrice: itemTotal,
         variantId: matchedVariantId,
-      };
-    });
+      });
+    }
 
-    // 3. Server-Side Shipping Cost Calculation
+    const sanitizedCustomerName = String(customer_name).slice(0, 150).trim();
+    const sanitizedAddress = customer_address ? String(customer_address).slice(0, 1000).trim() : null;
+    const sanitizedOrderNotes = cleanPayload.order_notes ? String(cleanPayload.order_notes).slice(0, 500).trim() : null;
+
+    // 3. Server-Side Shipping Cost Calculation (Zero-Trust Regional Floor Protection)
     const deliveryMethod = String(parsedMeta.delivery_method || cleanPayload.delivery_method || "courier");
     let validatedShippingCost = 0;
 
     if (deliveryMethod === "courier") {
-      const requestedShippingCost = Number(parsedMeta.shipping_cost || cleanPayload.shipping_cost);
-      if (!isNaN(requestedShippingCost) && requestedShippingCost >= 0) {
-        validatedShippingCost = Math.floor(requestedShippingCost);
-      } else {
-        validatedShippingCost = 14000;
-      }
+      const requestedShippingCost = Number(parsedMeta.shipping_cost ?? cleanPayload.shipping_cost);
+      validatedShippingCost = validateServerCourierCost(
+        requestedShippingCost,
+        sanitizedAddress || "",
+        totalItemQuantity
+      );
     } else {
       validatedShippingCost = 0;
     }
 
     // 4. Server Grand Total Price
     const serverGrandTotal = serverSubtotal + validatedShippingCost;
-    const sanitizedCustomerName = String(customer_name).slice(0, 150).trim();
-    const sanitizedAddress = customer_address ? String(customer_address).slice(0, 1000).trim() : null;
-    const sanitizedOrderNotes = cleanPayload.order_notes ? String(cleanPayload.order_notes).slice(0, 500).trim() : null;
 
     // 5. Find or Create Customer in 'customers' table
     let customerId: string | null = null;
@@ -290,9 +353,12 @@ export async function POST(request: NextRequest) {
       customer_name: sanitizedCustomerName,
       customer_wa: sanitizedWa,
       customer_address: sanitizedAddress,
+      subtotal: serverSubtotal,
+      shipping_cost: validatedShippingCost,
       price: serverGrandTotal,
       total_price: serverGrandTotal,
       grand_total: serverGrandTotal,
+      items: validatedItems,
       created_at: createdOrder.created_at
     };
 
