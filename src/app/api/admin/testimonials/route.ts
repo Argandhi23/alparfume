@@ -4,6 +4,8 @@ import { verifyAdminSession, getServiceClient } from "@/lib/adminAuth";
 import { getLocalTestimonials, saveLocalTestimonials } from "@/lib/testimonialsHelper";
 import { Testimonial } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const supabase = getServiceClient();

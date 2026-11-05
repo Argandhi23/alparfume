@@ -70,7 +70,7 @@ async function getTestimonials(): Promise<Testimonial[]> {
   try {
     const { data, error } = await supabase
       .from("testimonials")
-      .select("id, customer_name, rating, product_id, product_name_override, review_text, tag, image_url, is_verified_buyer, is_active, sort_order, created_at, products(id, name, slug, image_url)")
+      .select("id, customer_name, customer_avatar_url, rating, product_id, product_name_override, review_text, tag, image_url, is_verified_buyer, is_active, sort_order, created_at, products(id, name, slug, image_url)")
       .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: false });
