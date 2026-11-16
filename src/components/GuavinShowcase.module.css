@@ -1,0 +1,382 @@
+.carousel {
+  --slide-width: clamp(198px, 51vw, 520px);
+  padding-inline: max(0px, calc((100% - var(--slide-width)) / 2));
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+.slide {
+  --arc-offset: 0;
+  --distance: max(var(--arc-offset), calc(-1 * var(--arc-offset)));
+  --detail-opacity: max(0, calc(1 - var(--distance) * 1.4));
+  flex: 0 0 var(--slide-width);
+  min-width: 0;
+}
+
+.slide + .slide {
+  --arc-offset: 1;
+}
+
+.slideTitle,
+.slide figcaption {
+  opacity: var(--detail-opacity);
+}
+
+.slide[data-active="false"] .slideTitle,
+.slide[data-active="false"] figcaption {
+  pointer-events: none;
+}
+
+.slideTitle:focus-within,
+.slide figcaption:focus-within {
+  opacity: 1;
+}
+
+.viewer {
+  margin: 0;
+}
+
+.scene {
+  --width: clamp(132px, 34vw, 218px);
+  --height: calc(var(--width) * 1.36);
+  --depth: calc(var(--width) * 0.54);
+  --cap-radius: calc(var(--width) * 0.25);
+  --cap-height: calc(var(--width) * 0.69);
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: calc(var(--height) + var(--cap-height) + 52px);
+  perspective: 1100px;
+  transform: translateY(calc(var(--distance, 0) * -32px))
+    rotateZ(calc(var(--arc-offset, 0) * 16deg))
+    scale(calc(1 - var(--distance, 0) * 0.26));
+  user-select: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene {
+    transform: none;
+  }
+}
+
+.dragArea {
+  position: absolute;
+  top: 12px;
+  bottom: 14px;
+  left: 50%;
+  width: calc(var(--width) * 1.2);
+  translate: -50% 0;
+  touch-action: pan-y pinch-zoom;
+  cursor: grab;
+}
+
+.dragArea[data-dragging="true"] {
+  cursor: grabbing;
+}
+
+.photo {
+  display: none;
+}
+
+.shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: var(--width);
+  height: 22px;
+  translate: -50% 0;
+  background: radial-gradient(ellipse, #4b3a2e45, transparent 72%);
+  filter: blur(4px);
+}
+
+.bottle {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  width: var(--width);
+  height: var(--height);
+  translate: -50% 0;
+  transform-style: preserve-3d;
+  transform: rotateX(var(--pitch, -6deg)) rotateY(var(--yaw, -12deg));
+  pointer-events: none;
+}
+
+.face {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid #d0c7c2;
+  backface-visibility: hidden;
+}
+
+.front,
+.back {
+  inset: 0;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 2px #ffffffb0, inset 0 0 12px #a89c90;
+}
+
+.front {
+  transform: translateZ(calc(var(--depth) / 2));
+  background:
+    url("/models/guavin-label.webp") center / 92% 90% no-repeat,
+    linear-gradient(110deg, #e1d9d3, #fff 16%, #ded3cb 63%, #fdfaf7 92%, #c2b4a9);
+}
+
+.back {
+  transform: rotateY(180deg) translateZ(calc(var(--depth) / 2));
+  background: linear-gradient(105deg, #c1b5ab, #faf6f0 13%, #ded2c6 32%, #ece1d6 78%, #fbf8f3 90%, #c8bcb0);
+}
+
+.left,
+.right {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: var(--depth);
+  translate: -50% 0;
+  background: linear-gradient(90deg, #c8b9ae, #f4eae0 13%, #dfd0c3 30%, #e5d7cb 76%, #fff9f3 93%, #bcaea4);
+  box-shadow: inset 0 3px 9px #fff, inset 0 -7px 6px #b3a59a;
+}
+
+.left {
+  transform: rotateY(-90deg) translateZ(calc(var(--width) / 2));
+}
+
+.right {
+  transform: rotateY(90deg) translateZ(calc(var(--width) / 2));
+}
+
+.top,
+.base {
+  top: 50%;
+  width: 100%;
+  height: var(--depth);
+  translate: 0 -50%;
+  background: linear-gradient(110deg, #c4b7ac, #fefbf7 16%, #d5c9bf 57%, #fefbf7 90%, #b6a89c);
+}
+
+.top {
+  transform: rotateX(90deg) translateZ(calc(var(--height) / 2));
+}
+
+.base {
+  transform: rotateX(-90deg) translateZ(calc(var(--height) / 2));
+}
+
+.cap {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  height: var(--cap-height);
+  transform-style: preserve-3d;
+}
+
+.capPanel {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: calc(var(--cap-radius) * 0.32);
+  height: 100%;
+  translate: -50% 0;
+  transform: rotateY(var(--cap-panel)) translateZ(var(--cap-radius));
+  backface-visibility: hidden;
+  background: linear-gradient(90deg, #17141b, #29252e 26%, #18151c 65%, #121015);
+  box-shadow: inset 0 2px 0 #ffffff15, inset 0 -2px 0 #0008;
+}
+
+.capTop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(var(--cap-radius) * 2.025);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 26% 35%, #37323e, #19161d 75%);
+  box-shadow: inset 0 0 0 1px #ffffff26;
+  translate: -50% -50%;
+  transform: rotateX(90deg);
+  backface-visibility: hidden;
+}
+
+.merryKiss {
+  --depth: calc(var(--width) * 0.47);
+  --cap-radius: calc(var(--width) * 0.29);
+  --cap-height: calc(var(--width) * 0.60);
+  --bevel: calc(var(--width) * 0.024);
+}
+
+.merryKiss .face {
+  border: 0;
+}
+
+.merryKiss .front,
+.merryKiss .back {
+  inset-inline: var(--bevel);
+  border-radius: 2px;
+  box-shadow: inset 0 1px 2px #ffd8f289, inset 0 -5px 6px #4c0b3c78;
+}
+
+.merryKiss .front {
+  background:
+    radial-gradient(ellipse 56% 66% at 49% 48%, #e648922d, #c3368015 55%, transparent 100%),
+    linear-gradient(101deg, #4b0d3925, transparent 19% 76%, #ffc2e524 91%, #5c124839),
+    url("/models/merry-kiss-edp-front.webp") center / 100% 100% no-repeat,
+    #8c155e;
+}
+
+.merryKiss .back {
+  background:
+    linear-gradient(180deg, #d462a578, transparent 10% 83%, #590b42a3 93%, #c04d9759),
+    radial-gradient(ellipse 69% 66% at 51% 49%, #ca3a83, #aa2462 54%, #73184f 84%, #511039);
+}
+
+.merryKiss .left,
+.merryKiss .right {
+  width: calc(var(--depth) - 2 * var(--bevel));
+  background:
+    linear-gradient(180deg, #b8539266, transparent 13% 82%, #4d103def 94%, #ac4d8765),
+    linear-gradient(91deg, #611844, #a7457e 8%, #b33173 42%, #a62567 72%, #611442);
+}
+
+.merryKiss .top,
+.merryKiss .base {
+  background: linear-gradient(98deg, #65224e, #ae558b 12%, #861b56 33%, #7b194f 72%, #be6097 92%, #57143e);
+  clip-path: polygon(
+    var(--bevel) 0, calc(100% - var(--bevel)) 0,
+    100% var(--bevel), 100% calc(100% - var(--bevel)),
+    calc(100% - var(--bevel)) 100%, var(--bevel) 100%,
+    0 calc(100% - var(--bevel)), 0 var(--bevel)
+  );
+}
+
+.merryKiss .bevel {
+  --edge-x: calc((var(--width) - var(--bevel)) / 2);
+  --edge-z: calc((var(--depth) - var(--bevel)) / 2);
+  inset-block: 0;
+  left: 50%;
+  width: calc(var(--bevel) * 1.44);
+  translate: -50% 0;
+  background: linear-gradient(90deg, #641644, #ae5386 45%, #7d2557);
+  box-shadow: inset 0 2px 4px #f0a9d269, inset 0 -5px 5px #490c35aa;
+}
+
+.frontLeft {
+  transform: translate3d(calc(-1 * var(--edge-x)), 0, var(--edge-z)) rotateY(-45deg);
+}
+
+.frontRight {
+  transform: translate3d(var(--edge-x), 0, var(--edge-z)) rotateY(45deg);
+}
+
+.backLeft {
+  transform: translate3d(calc(-1 * var(--edge-x)), 0, calc(-1 * var(--edge-z))) rotateY(-135deg);
+}
+
+.backRight {
+  transform: translate3d(var(--edge-x), 0, calc(-1 * var(--edge-z))) rotateY(135deg);
+}
+
+.smoothCap {
+  --cap-diameter: calc(var(--cap-radius) * 2);
+  --collar-height: calc(var(--cap-height) * 0.115);
+  transform: rotateY(calc(-1 * var(--yaw, -12deg)));
+}
+
+.smoothCap::before {
+  content: "";
+  position: absolute;
+  inset-block: 0 var(--collar-height);
+  left: 0;
+  width: var(--cap-diameter);
+  translate: -50% 0;
+  border-radius: 3% 3% 5% 5% / 3% 3% 3% 3%;
+  background:
+    linear-gradient(180deg, #ffffff13, transparent 16% 89%, #08080acc),
+    linear-gradient(90deg, #080a0e, #2b323c 12%, #6a737e 18%, #303943 24%, #1d242c 50%, #252e38 71%, #0c1016 94%, #07090d);
+}
+
+.capCollar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--cap-diameter) * 0.94);
+  height: var(--collar-height);
+  translate: -50% 0;
+  border-radius: 0 0 7% 7%;
+  background: linear-gradient(90deg, #080a0c, #414b57 21%, #232a33 49%, #0a0d12 92%);
+  box-shadow: inset 0 1px 0 #08090c;
+}
+
+.smoothCap::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--cap-diameter) * 0.94);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #0c0c0d;
+  translate: -50% 50%;
+  transform: rotateX(-90deg);
+  backface-visibility: hidden;
+}
+
+.smoothCap .capTop {
+  width: var(--cap-diameter);
+  background: linear-gradient(110deg, #424b55, #232b35 47%, #0e131a 90%);
+  box-shadow: inset 0 0 0 1px #a6b3c239;
+}
+
+.viewerButton {
+  display: inline-grid;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #e5e5e5;
+  border-radius: 50%;
+  color: #171717;
+}
+
+.viewerButton:hover {
+  border-color: #737373;
+}
+
+@supports not (transform-style: preserve-3d) {
+  .scene[data-has-photo="true"] .photo {
+    display: block;
+    width: min(100%, 440px);
+    height: auto;
+    pointer-events: none;
+  }
+
+  .merryKiss[data-has-photo="true"] .photo {
+    width: auto;
+    height: calc(var(--height) + var(--cap-height));
+  }
+
+  .scene[data-has-photo="true"] .bottle,
+  .dragArea,
+  .shadow,
+  .viewer figcaption {
+    display: none;
+  }
+
+  .scene[data-has-photo="false"] .bottle,
+  .scene[data-has-photo="false"] .front {
+    transform: none !important;
+  }
+
+  .scene[data-has-photo="false"] .face:not(.front),
+  .scene[data-has-photo="false"] .capPanel,
+  .scene[data-has-photo="false"] .capTop {
+    display: none;
+  }
+
+  .scene[data-has-photo="false"] .cap {
+    left: 25%;
+    width: 50%;
+    border-radius: 5px 5px 0 0;
+    background: linear-gradient(90deg, #101010, #2c2c2c 45%, #0c0c0c);
+  }
+}

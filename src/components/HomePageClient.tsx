@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import HeroSlider from "./HeroSlider";
 import CategoryGrid from "./CategoryGrid";
 import ProductGrid from "./ProductGrid";
@@ -8,6 +9,15 @@ import TestimonialsSection from "./TestimonialsSection";
 import { ProductWithVariants, Category, Banner, Testimonial } from "@/lib/supabase";
 import { DEFAULT_TESTIMONIALS } from "@/data/testimonials";
 import { Search, X } from "lucide-react";
+
+const Perfume3DShowcase = dynamic(() => import("./Perfume3DShowcase"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-[620px] w-full bg-brandWhite pt-10 pb-24 flex items-center justify-center">
+      <div className="h-64 w-44 rounded-3xl bg-neutral-100 animate-pulse" />
+    </div>
+  ),
+});
 
 interface HomePageClientProps {
   products: ProductWithVariants[];
@@ -54,6 +64,12 @@ export default function HomePageClient({ products, categories, banners, testimon
 
   return (
     <>
+      <Perfume3DShowcase
+        products={products}
+        merryKiss={products.find((product) => product.slug === "merry-kiss-eau-de-parfum")}
+        guavin={products.find((product) => product.slug === "guavin-eau-de-parfume")}
+      />
+
       {/* Top Hero Banner Slider */}
       <HeroSlider banners={banners} />
 
