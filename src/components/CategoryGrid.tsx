@@ -54,7 +54,7 @@ function CategoryItem({ cat }: { cat: Category }) {
   return (
     <Link
       href={`/categories/${cat.slug}`}
-      className="group relative aspect-[3/4] sm:aspect-[4/5] md:aspect-[3/4] w-full overflow-hidden rounded-lg sm:rounded-xl shadow-sm hover:shadow-xl transition-all duration-500 block cursor-pointer select-none"
+      className="group relative aspect-[3/4] sm:aspect-[4/5] md:aspect-[3/4] w-full overflow-hidden rounded-none shadow-sm hover:shadow-xl transition-all duration-500 block cursor-pointer select-none"
     >
       {/* Background Image or Solid Color */}
       {imageUrl && !imgError ? (
