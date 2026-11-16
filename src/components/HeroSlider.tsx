@@ -204,24 +204,6 @@ export default function HeroSlider({ banners = [] }: HeroSliderProps) {
             <HeroSlideItem key={slide.id} slide={slide} index={index} />
           ))}
         </div>
-
-        {/* Pagination Dots */}
-        {slides.length > 1 && (
-          <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center space-x-2">
-            {slides.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentSlide(index)}
-                aria-label={`Ke slide ${index + 1}`}
-                className={`transition-all duration-300 rounded-full ${
-                  currentSlide === index
-                    ? "w-6 h-2 bg-white shadow"
-                    : "w-2 h-2 bg-white/40 hover:bg-white/70"
-                }`}
-              />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

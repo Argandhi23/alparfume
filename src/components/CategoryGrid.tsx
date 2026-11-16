@@ -103,8 +103,8 @@ export default function CategoryGrid({ categories = [] }: CategoryGridProps) {
   items.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
 
   return (
-    <section className="w-full px-4 sm:px-6 md:px-8 py-6 md:py-10 max-w-[1400px] mx-auto font-sans">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+    <section className="w-full px-1.5 sm:px-2 md:px-2.5 pt-1.5 sm:pt-2 md:pt-2.5 pb-6 md:pb-10 font-sans">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-2 md:gap-2.5">
         {items.map((cat) => (
           <CategoryItem key={cat.id} cat={cat} />
         ))}
