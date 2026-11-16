@@ -64,17 +64,24 @@ export default function HomePageClient({ products, categories, banners, testimon
 
   return (
     <>
-      {/* Top Hero Banner Slider (Full-Width Edge-to-Edge) */}
-      <HeroSlider banners={banners} />
-
-      {/* 3D Eau de Parfum Showcase */}
+      {/* 1. Paling Atas: 3D Eau de Parfum Showcase */}
       <Perfume3DShowcase
         products={products}
         merryKiss={products.find((product) => product.slug === "merry-kiss-eau-de-parfum")}
         guavin={products.find((product) => product.slug === "guavin-eau-de-parfume")}
       />
 
-      {/* Category Grid Section (Links to /categories/[slug]) */}
+      {/* 2. Judul "Katalog" */}
+      <div className="w-full bg-brandWhite pt-2 pb-5 sm:pt-4 sm:pb-7 text-center font-sans">
+        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-brandBlack tracking-tight font-sans">
+          Katalog
+        </h2>
+      </div>
+
+      {/* 3. Gambar Besar (Full-Width Hero Banner Slider) */}
+      <HeroSlider banners={banners} />
+
+      {/* 4. Gambar Kecil Katalog Kategori (Links to /categories/[slug]) */}
       <CategoryGrid categories={categories} />
 
       {/* Best Seller & Catalog Section */}
