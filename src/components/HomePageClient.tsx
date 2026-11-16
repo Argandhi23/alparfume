@@ -69,6 +69,9 @@ export default function HomePageClient({ products, categories, banners, testimon
         products={products}
         merryKiss={products.find((product) => product.slug === "merry-kiss-eau-de-parfum")}
         guavin={products.find((product) => product.slug === "guavin-eau-de-parfume")}
+        elysianVanilla={products.find((product) => product.slug === "elysian-vanilla")}
+        pinkRomance={products.find((product) => product.slug === "pink-romance-eau-de-parfum")}
+        serenity={products.find((product) => product.slug === "serenity-eau-de-parfum")}
       />
 
       {/* 2. Judul "Katalog" */}
