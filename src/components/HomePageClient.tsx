@@ -64,14 +64,15 @@ export default function HomePageClient({ products, categories, banners, testimon
 
   return (
     <>
+      {/* Top Hero Banner Slider (Full-Width Edge-to-Edge) */}
+      <HeroSlider banners={banners} />
+
+      {/* 3D Eau de Parfum Showcase */}
       <Perfume3DShowcase
         products={products}
         merryKiss={products.find((product) => product.slug === "merry-kiss-eau-de-parfum")}
         guavin={products.find((product) => product.slug === "guavin-eau-de-parfume")}
       />
-
-      {/* Top Hero Banner Slider */}
-      <HeroSlider banners={banners} />
 
       {/* Category Grid Section (Links to /categories/[slug]) */}
       <CategoryGrid categories={categories} />

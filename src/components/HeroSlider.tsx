@@ -180,8 +180,8 @@ export default function HeroSlider({ banners = [] }: HeroSliderProps) {
   };
 
   return (
-    <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 md:px-8 pt-4 pb-2">
-      {/* Standard 16:9 aspect ratio banner */}
+    <div className="w-full">
+      {/* Full-bleed edge-to-edge 16:9 aspect ratio banner */}
       <div 
         ref={containerRef}
         onTouchStart={handleTouchStart}
@@ -191,7 +191,7 @@ export default function HeroSlider({ banners = [] }: HeroSliderProps) {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        className="relative w-full aspect-[16/9] overflow-hidden rounded-2xl shadow-md bg-neutral-900 cursor-grab active:cursor-grabbing select-none"
+        className="relative w-full aspect-[16/9] overflow-hidden bg-neutral-900 cursor-grab active:cursor-grabbing select-none"
       >
         {/* Slides Container */}
         <div

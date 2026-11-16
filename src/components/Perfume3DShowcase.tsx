@@ -1,6 +1,9 @@
 "use client";
 
 import React, {
+  Component,
+  ErrorInfo,
+  ReactNode,
   Suspense,
   useCallback,
   useEffect,
@@ -10,16 +13,8 @@ import React, {
 } from "react";
 import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import {
-  ContactShadows,
-  Cylinder,
-  Decal,
-  Float,
-  Ring,
-  RoundedBox,
-  Text,
-  useTexture,
-} from "@react-three/drei";
+import { Decal, Float, Ring, Text, useTexture } from "@react-three/drei";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type { ProductWithVariants } from "@/lib/supabase";
 
 // ============================================================================
@@ -50,7 +45,6 @@ export interface Perfume3DItemConfig {
   volumeLabel: string;
   tagline: string;
   scentNotes: string[];
-  // Warna Kaca Bening Celup (Translucent Color-Dipped Clear Glass)
   outerGlassColor: string;
   innerCavityColor: string;
   innerGlowColor: string;
@@ -107,88 +101,85 @@ function parseProductNotes(
 }
 
 // ============================================================================
-// SOFT STUDIO ENVIRONMENT (NON-METALLIC, NATURAL GLASS REFRACTION)
+// WEBGL AVAILABILITY CHECK & ERROR BOUNDARY (ANTI CRASH / CLIENT EXCEPTION)
 // ============================================================================
 
-function useSoftGlassEnvironment() {
-  const { gl, scene } = useThree();
-
-  useEffect(() => {
-    const pmrem = new THREE.PMREMGenerator(gl);
-    pmrem.compileEquirectangularShader();
-
-    const envScene = new THREE.Scene();
-    // Latar lembut netral agar kaca terlihat bening alami dan tidak tampak metalik
-    envScene.background = new THREE.Color("#f4f4f5");
-
-    const addSoftPanel = (
-      w: number,
-      h: number,
-      pos: [number, number, number],
-      lookAt: [number, number, number],
-      hexColor: string,
-      intensity: number
-    ) => {
-      const geom = new THREE.PlaneGeometry(w, h);
-      const col = new THREE.Color(hexColor).multiplyScalar(intensity);
-      const mat = new THREE.MeshBasicMaterial({
-        color: col,
-        side: THREE.DoubleSide,
-      });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set(pos[0], pos[1], pos[2]);
-      mesh.lookAt(lookAt[0], lookAt[1], lookAt[2]);
-      envScene.add(mesh);
-    };
-
-    // Softbox lembut (intensitas rendah agar tidak membuat efek krom/metalik)
-    addSoftPanel(6, 14, [-7, 1.5, 5], [0, 0, 0], "#ffffff", 1.25);
-    addSoftPanel(6, 14, [7, 1.5, 5], [0, 0, 0], "#ffffff", 1.2);
-    addSoftPanel(14, 12, [0, 0.5, -7], [0, 0, 0], "#ffffff", 1.35);
-
-    const renderTarget = pmrem.fromScene(envScene, 0.06);
-    const previousEnv = scene.environment;
-    scene.environment = renderTarget.texture;
-
-    return () => {
-      scene.environment = previousEnv;
-      renderTarget.dispose();
-      pmrem.dispose();
-    };
-  }, [gl, scene]);
+function checkWebGLSupport(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl =
+      canvas.getContext("webgl2", { powerPreference: "default" }) ||
+      canvas.getContext("webgl", { powerPreference: "default" }) ||
+      canvas.getContext("experimental-webgl");
+    if (!gl) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-// ============================================================================
-// OPTIONAL DECAL SUB-COMPONENT
-// ============================================================================
+interface WebGLErrorBoundaryProps {
+  fallback: ReactNode;
+  children: ReactNode;
+}
 
-function BottleDecalOverlay({ decalUrl }: { decalUrl: string }) {
-  const texture = useTexture(decalUrl);
-  useEffect(() => {
-    if (texture) {
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.anisotropy = 8;
-      texture.needsUpdate = true;
+interface WebGLErrorBoundaryState {
+  hasError: boolean;
+}
+
+class WebGLErrorBoundary extends Component<
+  WebGLErrorBoundaryProps,
+  WebGLErrorBoundaryState
+> {
+  constructor(props: WebGLErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): WebGLErrorBoundaryState {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.warn("3D WebGL Showcase fallback activated:", error.message, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
     }
-  }, [texture]);
-
-  return (
-    <Decal
-      position={[0, -0.02, 0.53]}
-      rotation={[0, 0, 0]}
-      scale={[1.8, 2.45, 0.35]}
-      map={texture}
-    />
-  );
+    return this.props.children;
+  }
 }
 
 // ============================================================================
-// GEOMETRI RONGGA KACA DALAM BERLEKUK & SELANG SEMPROTAN (SHARED MEMO)
+// SHARED LIGHTWEIGHT GEOMETRIES (DIBUAT 1 KALI UNTUK SEMUA 5 BOTOL — HEMAT GPU)
 // ============================================================================
 
-function createWaistedInnerCavityGeometry(): THREE.BufferGeometry {
-  const geom = new THREE.BoxGeometry(1.62, 2.12, 0.68, 28, 36, 14);
-  const pos = geom.attributes.position;
+interface SharedBottleGeometries {
+  outerBottle: THREE.BufferGeometry;
+  innerCavity: THREE.BufferGeometry;
+  dipTube: THREE.BufferGeometry;
+  valveHousing: THREE.BufferGeometry;
+  neckRing: THREE.BufferGeometry;
+  capCollar: THREE.BufferGeometry;
+  capBody: THREE.BufferGeometry;
+  footBlock: THREE.BufferGeometry;
+  meniscusDefault: THREE.BufferGeometry;
+  bubbleSerenityBig: THREE.BufferGeometry;
+  bubbleSerenitySmall: THREE.BufferGeometry;
+  shadowPlane: THREE.BufferGeometry;
+}
+
+let cachedGeometries: SharedBottleGeometries | null = null;
+
+function getSharedBottleGeometries(): SharedBottleGeometries {
+  if (cachedGeometries) return cachedGeometries;
+
+  // 1. Rongga dalam berlekuk (low-poly smooth: 14x18x6 segmen, sangat ringan)
+  const innerCavity = new THREE.BoxGeometry(1.62, 2.12, 0.68, 14, 18, 6);
+  const pos = innerCavity.attributes.position;
   const v = new THREE.Vector3();
 
   for (let i = 0; i < pos.count; i++) {
@@ -204,12 +195,10 @@ function createWaistedInnerCavityGeometry(): THREE.BufferGeometry {
     v.x *= rFactor;
     v.z *= rFactor;
 
-    // Lekukan dinding kaca dalam di bagian tengah kiri & kanan seperti foto asli EDP 50ml
     const clampedY = THREE.MathUtils.clamp(ny + 0.04, -1, 1);
     const waistCurve = Math.pow(Math.cos(clampedY * Math.PI * 0.5), 1.35);
     v.x *= 1.0 - 0.095 * waistCurve;
 
-    // Lengkungan dasar kaca tebal di bagian bawah tengah
     if (ny < -0.68) {
       const bottomArch = Math.max(0, 1.0 - nx * nx * 1.15);
       const bottomBlend = THREE.MathUtils.smoothstep(-ny, 0.68, 1.0);
@@ -218,12 +207,9 @@ function createWaistedInnerCavityGeometry(): THREE.BufferGeometry {
 
     pos.setXYZ(i, v.x, v.y, v.z);
   }
+  innerCavity.computeVertexNormals();
 
-  geom.computeVertexNormals();
-  return geom;
-}
-
-function createDipTubeGeometry(): THREE.BufferGeometry {
+  // 2. Selang semprotan melengkung (ringan: 18 segmen)
   const curve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, 1.32, 0),
     new THREE.Vector3(0.02, 0.72, 0.01),
@@ -231,11 +217,86 @@ function createDipTubeGeometry(): THREE.BufferGeometry {
     new THREE.Vector3(0.23, -0.52, 0.01),
     new THREE.Vector3(0.46, -0.96, 0),
   ]);
-  return new THREE.TubeGeometry(curve, 36, 0.024, 12, false);
+  const dipTube = new THREE.TubeGeometry(curve, 18, 0.024, 8, false);
+
+  // 3. Geometri botol luar & komponen tutup (shared)
+  const outerBottle = new RoundedBoxGeometry(2.04, 2.72, 1.04, 3, 0.065);
+  const valveHousing = new THREE.CylinderGeometry(0.16, 0.11, 0.22, 16);
+  const neckRing = new THREE.CylinderGeometry(0.515, 0.515, 0.08, 24);
+  const capCollar = new THREE.CylinderGeometry(0.532, 0.528, 0.17, 28);
+  const capBody = new THREE.CylinderGeometry(0.542, 0.545, 0.98, 28);
+  const footBlock = new RoundedBoxGeometry(0.24, 0.04, 0.76, 2, 0.015);
+  const meniscusDefault = new RoundedBoxGeometry(0.84, 0.14, 0.52, 2, 0.065);
+  const bubbleSerenityBig = new RoundedBoxGeometry(0.56, 0.27, 0.44, 3, 0.13);
+  const bubbleSerenitySmall = new RoundedBoxGeometry(0.15, 0.14, 0.2, 2, 0.068);
+  const shadowPlane = new THREE.PlaneGeometry(3.2, 1.8);
+
+  cachedGeometries = {
+    outerBottle,
+    innerCavity,
+    dipTube,
+    valveHousing,
+    neckRing,
+    capCollar,
+    capBody,
+    footBlock,
+    meniscusDefault,
+    bubbleSerenityBig,
+    bubbleSerenitySmall,
+    shadowPlane,
+  };
+
+  return cachedGeometries;
+}
+
+let cachedShadowTexture: THREE.CanvasTexture | null = null;
+
+function getSoftShadowTexture(): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  if (cachedShadowTexture) return cachedShadowTexture;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const grad = ctx.createRadialGradient(64, 64, 6, 64, 64, 60);
+    grad.addColorStop(0, "rgba(0, 0, 0, 0.34)");
+    grad.addColorStop(0.5, "rgba(0, 0, 0, 0.14)");
+    grad.addColorStop(1, "rgba(0, 0, 0, 0.0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 128, 128);
+  }
+  cachedShadowTexture = new THREE.CanvasTexture(canvas);
+  return cachedShadowTexture;
 }
 
 // ============================================================================
-// PROCEDURAL 3D PERFUME BOTTLE (NON-METALLIC DIPPED CLEAR GLASS + PITCH BLACK CAP)
+// OPTIONAL DECAL SUB-COMPONENT
+// ============================================================================
+
+function BottleDecalOverlay({ decalUrl }: { decalUrl: string }) {
+  const texture = useTexture(decalUrl);
+  useEffect(() => {
+    if (texture) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = 4;
+      texture.needsUpdate = true;
+    }
+  }, [texture]);
+
+  return (
+    <Decal
+      position={[0, -0.02, 0.53]}
+      rotation={[0, 0, 0]}
+      scale={[1.8, 2.45, 0.35]}
+      map={texture}
+    />
+  );
+}
+
+// ============================================================================
+// PROCEDURAL 3D PERFUME BOTTLE (LIGHTWEIGHT, NON-METALLIC, PITCH BLACK CAP)
 // ============================================================================
 
 interface ProceduralBottleProps {
@@ -256,32 +317,12 @@ function ProceduralPerfumeBottle({
   const groupRef = useRef<THREE.Group>(null);
   const { viewport } = useThree();
 
-  const waistedCavityGeom = useMemo(() => createWaistedInnerCavityGeometry(), []);
-  const dipTubeGeom = useMemo(() => createDipTubeGeometry(), []);
+  const geoms = useMemo(() => getSharedBottleGeometries(), []);
+  const shadowTex = useMemo(() => getSoftShadowTexture(), []);
 
-  useEffect(() => {
-    return () => {
-      waistedCavityGeom.dispose();
-      dipTubeGeom.dispose();
-    };
-  }, [waistedCavityGeom, dipTubeGeom]);
-
-  // Optical shader untuk botol kaca bening celup (TANPA kilap metalik berlebihan)
+  // Shader kaca bening celup (1 program shader ringan yang di-share oleh semua 5 botol!)
   const handleOuterGlassBeforeCompile = useCallback(
     (shader: THREE.WebGLProgramParametersWithUniforms) => {
-      shader.uniforms.uOuterWallColor = {
-        value: new THREE.Color(item.outerGlassColor),
-      };
-      shader.uniforms.uInnerLiquidColor = {
-        value: new THREE.Color(item.innerCavityColor),
-      };
-      shader.uniforms.uInnerGlowColor = {
-        value: new THREE.Color(item.innerGlowColor),
-      };
-      shader.uniforms.uRimColor = {
-        value: new THREE.Color(item.bubbleRimColor),
-      };
-
       shader.vertexShader = shader.vertexShader.replace(
         "#include <common>",
         `#include <common>
@@ -302,10 +343,6 @@ function ProceduralPerfumeBottle({
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <common>",
         `#include <common>
-        uniform vec3 uOuterWallColor;
-        uniform vec3 uInnerLiquidColor;
-        uniform vec3 uInnerGlowColor;
-        uniform vec3 uRimColor;
         varying vec3 vGlassLocalPos;
         varying vec3 vGlassViewDir;
         varying vec3 vGlassWorldNormal;`
@@ -314,10 +351,14 @@ function ProceduralPerfumeBottle({
       shader.fragmentShader = shader.fragmentShader.replace(
         "#include <dithering_fragment>",
         `
+        vec3 uInnerLiquidColor = diffuse;
+        vec3 uOuterWallColor = emissive;
+        vec3 uInnerGlowColor = mix(diffuse, vec3(1.0), 0.32);
+        vec3 uRimColor = mix(diffuse, vec3(1.0), 0.62);
+
         float nx = vGlassLocalPos.x / 1.02;
         float ny = vGlassLocalPos.y / 1.36;
 
-        // Kurva batas dinding kaca dalam (cekung ke dalam di bagian tengah seperti foto asli)
         float clampedNy = clamp((ny + 0.04) * 1.12, -1.57079, 1.57079);
         float waistBoundaryX = 0.805 - 0.078 * pow(cos(clampedNy), 1.35);
 
@@ -329,21 +370,16 @@ function ProceduralPerfumeBottle({
         float dyTop = ny - topShoulderY;
         float cavitySignedDist = max(dxWall, max(dyBottom, dyTop));
 
-        // Mask area rongga tengah (1 di tengah bening, 0 di dinding kaca tebal)
         float inCavity = 1.0 - smoothstep(-0.04, 0.05, cavitySignedDist);
 
-        // Garis bias / tebal dinding kaca dalam yang lembut (tidak metalik)
         float innerRimBand = exp(-pow((cavitySignedDist + 0.006) / 0.038, 2.0));
         innerRimBand *= (1.0 - 0.6 * smoothstep(0.75, 0.92, ny) * (1.0 - smoothstep(0.0, 0.45, abs(nx))));
 
-        // Bias cahaya lembut di dasar kaca bawah
         float bottomCushion = exp(-pow((ny + 0.825) / 0.048, 2.0)) * smoothstep(0.92, 0.45, abs(nx));
 
-        // Fresnel kaca alami yang halus (bukan metalik)
         float ndotv = clamp(abs(dot(normalize(vGlassWorldNormal), normalize(vGlassViewDir))), 0.0, 1.0);
         float fresnel = pow(1.0 - ndotv, 3.6);
 
-        // Cahaya tembus di tengah botol (efek kaca bening dicelup warna, tidak pekat)
         float centerRadial = length(vec2(nx * 0.85, (ny - 0.05) * 0.72));
         float centerTranslucency = clamp(1.0 - centerRadial * 0.78, 0.0, 1.0) * inCavity;
 
@@ -352,13 +388,11 @@ function ProceduralPerfumeBottle({
         vec3 wallGlassTint = mix(uOuterWallColor, uInnerLiquidColor, 0.32);
         vec3 dippedColor = mix(wallGlassTint, centerGlassTint, inCavity);
 
-        // Gunakan warna kaca celup alami dengan bias kaca halus (tanpa kilap metalik)
         vec3 rimHighlightCol = mix(uRimColor, vec3(1.0), 0.25);
         vec3 finalRgb = mix(dippedColor, rimHighlightCol, clamp(innerRimBand * 0.46, 0.0, 0.55));
         finalRgb = mix(finalRgb, rimHighlightCol, clamp(bottomCushion * 0.34, 0.0, 0.45));
         finalRgb += vec3(1.0) * (fresnel * 0.12);
 
-        // Transparansi kaca bening celup
         float baseAlpha = mix(0.66, 0.40, inCavity);
         baseAlpha = mix(baseAlpha, 0.34, centerTranslucency * 0.62);
         baseAlpha = clamp(
@@ -372,12 +406,7 @@ function ProceduralPerfumeBottle({
         `
       );
     },
-    [
-      item.outerGlassColor,
-      item.innerCavityColor,
-      item.innerGlowColor,
-      item.bubbleRimColor,
-    ]
+    []
   );
 
   useFrame((_, delta) => {
@@ -399,7 +428,8 @@ function ProceduralPerfumeBottle({
 
     const targetX = offset * xSpacing;
     const targetY = -Math.pow(offset, 2) * 0.22 + offset * -0.05;
-    const targetZ = -Math.pow(absOffset, 1.2) * (isMobileViewport ? 1.65 : 1.42);
+    const targetZ =
+      -Math.pow(absOffset, 1.2) * (isMobileViewport ? 1.65 : 1.42);
 
     group.position.x = THREE.MathUtils.lerp(
       group.position.x,
@@ -440,7 +470,7 @@ function ProceduralPerfumeBottle({
       lerpFactor
     );
 
-    // 3. DYNAMIC SCALE (Di HP sedikit lebih ramping agar jarak kiri-kanan makin lega)
+    // 3. DYNAMIC SCALE
     const centerScale = isMobileViewport ? 0.92 : 1.02;
     const sideScale = isMobileViewport ? 0.62 : 0.72;
     const baseScale = THREE.MathUtils.lerp(
@@ -448,7 +478,11 @@ function ProceduralPerfumeBottle({
       sideScale,
       Math.min(1, absOffset * 0.85)
     );
-    const nextScale = THREE.MathUtils.lerp(group.scale.x, baseScale, lerpFactor);
+    const nextScale = THREE.MathUtils.lerp(
+      group.scale.x,
+      baseScale,
+      lerpFactor
+    );
     group.scale.setScalar(nextScale);
   });
 
@@ -502,16 +536,31 @@ function ProceduralPerfumeBottle({
 
   return (
     <group ref={groupRef}>
+      {/* Bayangan lantai ringan per-botol (menggantikan ContactShadows FBO yang berat) */}
+      {shadowTex && (
+        <mesh
+          geometry={geoms.shadowPlane}
+          position={[0, -1.52, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <meshBasicMaterial
+            map={shadowTex}
+            color={item.shadowColor}
+            transparent
+            opacity={0.42}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
       <Float
         speed={1.3}
         rotationIntensity={0.03}
         floatIntensity={0.11}
         floatingRange={[-0.022, 0.022]}
       >
-        {/* ================================================================
-            1. SELANG SEMPROTAN DALAM & HOUSING VALVE (TERLIHAT SAMAR DI BALIK KACA BENING)
-           ================================================================ */}
-        <mesh geometry={dipTubeGeom} renderOrder={1}>
+        {/* 1. SELANG SEMPROTAN DALAM & HOUSING VALVE */}
+        <mesh geometry={geoms.dipTube} renderOrder={1}>
           <meshStandardMaterial
             color="#ffffff"
             roughness={0.35}
@@ -522,8 +571,8 @@ function ProceduralPerfumeBottle({
           />
         </mesh>
 
-        <Cylinder
-          args={[0.16, 0.11, 0.22, 24]}
+        <mesh
+          geometry={geoms.valveHousing}
           position={[0, 1.21, 0]}
           renderOrder={1}
         >
@@ -535,35 +584,28 @@ function ProceduralPerfumeBottle({
             opacity={0.36}
             depthWrite={false}
           />
-        </Cylinder>
+        </mesh>
 
-        {/* ================================================================
-            2. RONGGA CAIRAN DALAM BERLEKUK (WAISTED INNER CAVITY — NON-METALLIC)
-           ================================================================ */}
+        {/* 2. RONGGA CAIRAN DALAM BERLEKUK */}
         <mesh
-          geometry={waistedCavityGeom}
+          geometry={geoms.innerCavity}
           position={[0, 0.05, 0]}
           renderOrder={2}
         >
-          <meshPhysicalMaterial
+          <meshStandardMaterial
             color={item.innerCavityColor}
             emissive={item.innerGlowColor}
             emissiveIntensity={0.18}
             roughness={0.28}
             metalness={0.0}
-            clearcoat={0.15}
-            clearcoatRoughness={0.3}
-            envMapIntensity={0.2}
-            ior={1.38}
             transparent
             opacity={0.26}
             depthWrite={false}
           />
         </mesh>
 
-        {/* Rim bias kaca dalam (BackSide) */}
         <mesh
-          geometry={waistedCavityGeom}
+          geometry={geoms.innerCavity}
           position={[0, 0.05, 0]}
           scale={[1.018, 1.012, 1.02]}
           renderOrder={2}
@@ -579,32 +621,26 @@ function ProceduralPerfumeBottle({
           />
         </mesh>
 
-        {/* ================================================================
-            2B. GELEMBUNG UDARA / MENISKUS CAIRAN DI ATAS RONGGA DALAM
-           ================================================================ */}
+        {/* 2B. GELEMBUNG UDARA / MENISKUS */}
         {item.bubblePreset === "serenity" ? (
           <>
-            <group position={[0.43, 1.03, 0.06]} rotation={[0, 0, -0.08]}>
-              <RoundedBox
-                args={[0.56, 0.27, 0.44]}
-                radius={0.13}
-                smoothness={4}
-                renderOrder={2}
-              >
-                <meshStandardMaterial
-                  color={item.bubbleRimColor}
-                  roughness={0.25}
-                  metalness={0.0}
-                  transparent
-                  opacity={0.38}
-                  depthWrite={false}
-                />
-              </RoundedBox>
-            </group>
-            <RoundedBox
-              args={[0.15, 0.14, 0.2]}
-              radius={0.068}
-              smoothness={4}
+            <mesh
+              geometry={geoms.bubbleSerenityBig}
+              position={[0.43, 1.03, 0.06]}
+              rotation={[0, 0, -0.08]}
+              renderOrder={2}
+            >
+              <meshStandardMaterial
+                color={item.bubbleRimColor}
+                roughness={0.25}
+                metalness={0.0}
+                transparent
+                opacity={0.38}
+                depthWrite={false}
+              />
+            </mesh>
+            <mesh
+              geometry={geoms.bubbleSerenitySmall}
               position={[-0.58, 1.09, 0.08]}
               renderOrder={2}
             >
@@ -616,13 +652,11 @@ function ProceduralPerfumeBottle({
                 opacity={0.4}
                 depthWrite={false}
               />
-            </RoundedBox>
+            </mesh>
           </>
         ) : (
-          <RoundedBox
-            args={[0.84, 0.14, 0.52]}
-            radius={0.065}
-            smoothness={4}
+          <mesh
+            geometry={geoms.meniscusDefault}
             position={[0.0, 1.09, 0.02]}
             renderOrder={2}
           >
@@ -634,31 +668,19 @@ function ProceduralPerfumeBottle({
               opacity={0.22}
               depthWrite={false}
             />
-          </RoundedBox>
+          </mesh>
         )}
 
-        {/* ================================================================
-            3. DINDING KACA LUAR 50ML (KACA BENING DICELUP WARNA — TIDAK METALIK)
-           ================================================================ */}
-        <RoundedBox
-          args={[2.04, 2.72, 1.04]}
-          radius={0.065}
-          smoothness={5}
-          castShadow
-          receiveShadow
-          renderOrder={3}
-        >
-          <meshPhysicalMaterial
-            customProgramCacheKey={() => `dipped-glass-natural-${item.id}`}
+        {/* 3. DINDING KACA LUAR 50ML (KACA BENING DICELUP WARNA — RINGAN & TIDAK METALIK) */}
+        <mesh geometry={geoms.outerBottle} renderOrder={3}>
+          <meshStandardMaterial
+            customProgramCacheKey={() => "alparfume-dipped-glass-shared-v1"}
             onBeforeCompile={handleOuterGlassBeforeCompile}
-            color={item.outerGlassColor}
+            color={item.innerCavityColor}
+            emissive={item.outerGlassColor}
+            emissiveIntensity={1.0}
             roughness={0.22}
             metalness={0.0}
-            clearcoat={0.25}
-            clearcoatRoughness={0.28}
-            ior={1.5}
-            reflectivity={0.35}
-            envMapIntensity={0.22}
             transparent
             opacity={0.5}
             depthWrite={false}
@@ -669,13 +691,11 @@ function ProceduralPerfumeBottle({
               <BottleDecalOverlay decalUrl={item.decalUrl} />
             </Suspense>
           )}
-        </RoundedBox>
+        </mesh>
 
         {/* Kaki sudut botol kaca di kiri bawah & kanan bawah */}
-        <RoundedBox
-          args={[0.24, 0.04, 0.76]}
-          radius={0.015}
-          smoothness={2}
+        <mesh
+          geometry={geoms.footBlock}
           position={[-0.84, -1.365, 0]}
           renderOrder={3}
         >
@@ -687,11 +707,9 @@ function ProceduralPerfumeBottle({
             opacity={0.62}
             depthWrite={false}
           />
-        </RoundedBox>
-        <RoundedBox
-          args={[0.24, 0.04, 0.76]}
-          radius={0.015}
-          smoothness={2}
+        </mesh>
+        <mesh
+          geometry={geoms.footBlock}
           position={[0.84, -1.365, 0]}
           renderOrder={3}
         >
@@ -703,56 +721,38 @@ function ProceduralPerfumeBottle({
             opacity={0.62}
             depthWrite={false}
           />
-        </RoundedBox>
+        </mesh>
 
-        {/* ================================================================
-            4. LEHER & TUTUP BOTOL HITAM PEKAT (JET BLACK — TIDAK ABU/METALIK)
-           ================================================================ */}
-        {/* Cincin leher botol hitam pekat */}
-        <Cylinder args={[0.515, 0.515, 0.08, 40]} position={[0, 1.39, 0]}>
+        {/* 4. LEHER & TUTUP BOTOL HITAM PEKAT (JET BLACK) */}
+        <mesh geometry={geoms.neckRing} position={[0, 1.39, 0]}>
           <meshStandardMaterial
             color="#040404"
             roughness={0.38}
             metalness={0.0}
-            envMapIntensity={0.0}
           />
-        </Cylinder>
+        </mesh>
 
-        {/* Collar bawah tutup botol hitam pekat */}
-        <Cylinder
-          args={[0.532, 0.528, 0.17, 48]}
-          position={[0, 1.505, 0]}
-          castShadow
-        >
+        <mesh geometry={geoms.capCollar} position={[0, 1.505, 0]}>
           <meshStandardMaterial
             color="#050505"
             roughness={0.32}
             metalness={0.0}
-            envMapIntensity={0.0}
           />
-        </Cylinder>
+        </mesh>
 
-        {/* Bodi utama tutup botol hitam pekat */}
-        <Cylinder
-          args={[0.542, 0.545, 0.98, 48]}
-          position={[0, 2.09, 0]}
-          castShadow
-        >
+        <mesh geometry={geoms.capBody} position={[0, 2.09, 0]}>
           <meshStandardMaterial
             color="#050505"
             roughness={0.28}
             metalness={0.0}
-            envMapIntensity={0.0}
           />
-        </Cylinder>
+        </mesh>
 
-        {/* ================================================================
-            5. SABLON TIPOGRAFI PUTIH DI PERMUKAAN DEPAN KACA (z = 0.532)
-           ================================================================ */}
+        {/* 5. SABLON TIPOGRAFI PUTIH DI PERMUKAAN DEPAN KACA */}
         {!showDecal && (
           <group position={[0, 0, 0.532]} renderOrder={4}>
             <Ring
-              args={[0.225, 0.262, 48, 1, Math.PI * 0.2, Math.PI * 0.6]}
+              args={[0.225, 0.262, 32, 1, Math.PI * 0.2, Math.PI * 0.6]}
               position={[0, 0.73, 0]}
               scale={[1.2, 0.72, 1]}
               renderOrder={4}
@@ -807,46 +807,38 @@ function ProceduralPerfumeBottle({
 
 interface CarouselSceneProps {
   items: Perfume3DItemConfig[];
-  activeShadowColor: string;
   scrollTargetRef: React.MutableRefObject<number>;
   scrollCurrentRef: React.MutableRefObject<number>;
   scrollVelocityRef: React.MutableRefObject<number>;
   inertiaVelocityRef: React.MutableRefObject<number>;
   isDraggingRef: React.MutableRefObject<boolean>;
   globalUseDecal: boolean;
-  onSyncActiveIndex: (activeIdx: number) => void;
 }
 
 function PerfumeCarouselScene({
   items,
-  activeShadowColor,
   scrollTargetRef,
   scrollCurrentRef,
   scrollVelocityRef,
   inertiaVelocityRef,
   isDraggingRef,
   globalUseDecal,
-  onSyncActiveIndex,
 }: CarouselSceneProps) {
-  useSoftGlassEnvironment();
-
-  const lastReportedIdxRef = useRef(0);
-
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05);
     const maxIndex = Math.max(0, items.length - 1);
 
-    // Inersia bebas & fleksibel saat pengguna melepas geseran (tanpa snap terpaku ke satu produk)
-    if (!isDraggingRef.current && Math.abs(inertiaVelocityRef.current) > 0.0005) {
+    if (
+      !isDraggingRef.current &&
+      Math.abs(inertiaVelocityRef.current) > 0.0005
+    ) {
       scrollTargetRef.current = THREE.MathUtils.clamp(
         scrollTargetRef.current + inertiaVelocityRef.current * dt * 60,
         -0.15,
         maxIndex + 0.15
       );
-      // Redaman halus (friction) agar berhenti natural di posisi mana saja
       inertiaVelocityRef.current *= Math.pow(0.92, dt * 60);
 
-      // Pantulan lembut hanya jika melewati batas ujung paling kiri atau paling kanan
       if (scrollTargetRef.current < 0) {
         scrollTargetRef.current = THREE.MathUtils.lerp(
           scrollTargetRef.current,
@@ -894,20 +886,14 @@ function PerfumeCarouselScene({
       THREE.MathUtils.clamp(rawVelocity, -3.5, 3.5),
       0.22
     );
-
-    const nearestIdx = THREE.MathUtils.clamp(Math.round(next), 0, maxIndex);
-    if (lastReportedIdxRef.current !== nearestIdx) {
-      lastReportedIdxRef.current = nearestIdx;
-      onSyncActiveIndex(nearestIdx);
-    }
   });
 
   return (
     <>
-      <ambientLight intensity={0.95} />
+      <ambientLight intensity={1.0} />
       <directionalLight position={[3.2, 4.8, 5.2]} intensity={0.85} />
       <directionalLight position={[-3.2, 2.8, 4.0]} intensity={0.55} />
-      <pointLight position={[0, 0.25, -3.6]} intensity={1.45} color="#ffffff" />
+      <pointLight position={[0, 0.25, -3.6]} intensity={1.35} color="#ffffff" />
 
       <group position={[0, -0.34, 0]}>
         {items.map((item, idx) => (
@@ -921,21 +907,12 @@ function PerfumeCarouselScene({
           />
         ))}
       </group>
-
-      <ContactShadows
-        position={[0, -1.82, 0]}
-        opacity={0.18}
-        scale={9.5}
-        blur={2.6}
-        far={4}
-        color={activeShadowColor}
-      />
     </>
   );
 }
 
 // ============================================================================
-// MAIN SHOWCASE COMPONENT (ALL 5 EAU DE PARFUM PRODUCTS, FLEXIBLE SCROLL)
+// MAIN SHOWCASE COMPONENT (ALL 5 EAU DE PARFUM PRODUCTS, ULTRA LIGHTWEIGHT)
 // ============================================================================
 
 export default function Perfume3DShowcase({
@@ -948,8 +925,7 @@ export default function Perfume3DShowcase({
   useDecal = false,
   items: customItems,
 }: Perfume3DShowcaseProps) {
-  const [mounted, setMounted] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [canRenderWebGL, setCanRenderWebGL] = useState(false);
 
   const stageRef = useRef<HTMLDivElement>(null);
   const scrollTargetRef = useRef(0);
@@ -979,7 +955,11 @@ export default function Perfume3DShowcase({
       findBySlug(["merry-kiss-eau-de-parfum", "merry-kiss-edp"]);
     const guavinProduct =
       guavin ??
-      findBySlug(["guavin-eau-de-parfume", "guavin-eau-de-parfum", "guavin-edp"]);
+      findBySlug([
+        "guavin-eau-de-parfume",
+        "guavin-eau-de-parfum",
+        "guavin-edp",
+      ]);
     const elysianProduct =
       elysianVanilla ??
       findBySlug(["elysian-vanilla", "elysian-vanilla-eau-de-parfum"]);
@@ -991,7 +971,7 @@ export default function Perfume3DShowcase({
       findBySlug(["serenity-eau-de-parfum", "serenity-edp"]);
 
     return [
-      // 1. MERRY KISS — Botol Kaca Bening Celup Berry Magenta
+      // 1. MERRY KISS
       {
         id: "merry-kiss-edp-3d",
         slug: merryProduct?.slug || "merry-kiss-eau-de-parfum",
@@ -1051,7 +1031,7 @@ export default function Perfume3DShowcase({
           "https://pcpokqyahsheljmeaibh.supabase.co/storage/v1/object/public/product-images/products/merry-kiss-eau-de-parfum-1789298852594-0.jpg",
       },
 
-      // 2. GUAVIN — Botol Kaca Bening Celup Aqua Turquoise
+      // 2. GUAVIN
       {
         id: "guavin-edp-3d",
         slug: guavinProduct?.slug || "guavin-eau-de-parfume",
@@ -1102,7 +1082,7 @@ export default function Perfume3DShowcase({
           "https://pcpokqyahsheljmeaibh.supabase.co/storage/v1/object/public/product-images/products/guavin-eau-de-parfume-1789304594304-0.jpg",
       },
 
-      // 3. ELYSIAN VANILLA — Botol Kaca Bening Celup Honey Amber
+      // 3. ELYSIAN VANILLA
       {
         id: "elysian-vanilla-edp-3d",
         slug: elysianProduct?.slug || "elysian-vanilla",
@@ -1161,7 +1141,7 @@ export default function Perfume3DShowcase({
           "https://pcpokqyahsheljmeaibh.supabase.co/storage/v1/object/public/product-images/products/elysian-vanilla-1789298657570-0.jpg",
       },
 
-      // 4. PINK ROMANCE — Botol Kaca Bening Celup Soft Blush Rose
+      // 4. PINK ROMANCE
       {
         id: "pink-romance-edp-3d",
         slug: pinkProduct?.slug || "pink-romance-eau-de-parfum",
@@ -1221,7 +1201,7 @@ export default function Perfume3DShowcase({
           "https://pcpokqyahsheljmeaibh.supabase.co/storage/v1/object/public/product-images/products/pink-romance-eau-de-parfum-1789298776712-0.jpg",
       },
 
-      // 5. SERENITY — Botol Kaca Bening Celup Smoky Quartz Grey
+      // 5. SERENITY
       {
         id: "serenity-edp-3d",
         slug: serenityProduct?.slug || "serenity-eau-de-parfum",
@@ -1292,15 +1272,10 @@ export default function Perfume3DShowcase({
     serenity,
   ]);
 
-  const activeItem = showcaseItems[activeIndex] || showcaseItems[0];
-
   useEffect(() => {
-    setMounted(true);
+    setCanRenderWebGL(checkWebGLSupport());
   }, []);
 
-  // Wheel handler:
-  // - Jika geser menyamping (horizontal trackpad), gerakkan botol 3D secara fleksibel tanpa snap
-  // - Jika scroll ke bawah/atas (vertikal), biarkan halaman langsung turun ke foto-foto di bawahnya!
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -1318,8 +1293,6 @@ export default function Perfume3DShowcase({
           maxIndex + 0.2
         );
       }
-      // Untuk scroll vertikal (e.deltaY), TIDAK ada e.preventDefault() sehingga halaman
-      // langsung scroll ke bawah menuju foto-foto/banner di bawahnya dengan mulus.
     };
 
     el.addEventListener("wheel", handleWheel, { passive: false });
@@ -1348,7 +1321,6 @@ export default function Perfume3DShowcase({
     const totalDx = e.clientX - drag.startX;
     const totalDy = e.clientY - drag.startY;
 
-    // Tentukan arah geseran: samping (geser 3D fleksibel) vs bawah/atas (scroll halaman ke foto bawah)
     if (!drag.axisLocked) {
       if (Math.abs(totalDx) < 6 && Math.abs(totalDy) < 6) return;
       if (Math.abs(totalDx) > Math.abs(totalDy) * 1.05) {
@@ -1357,10 +1329,9 @@ export default function Perfume3DShowcase({
         try {
           e.currentTarget.setPointerCapture(e.pointerId);
         } catch {
-          // Ignore if pointer capture is unavailable
+          // Ignore
         }
       } else {
-        // Geser vertikal: batalkan drag 3D agar browser langsung scroll ke foto-foto di bawahnya
         drag.axisLocked = "vertical";
         dragStateRef.current = null;
         isDraggingRef.current = false;
@@ -1385,7 +1356,6 @@ export default function Perfume3DShowcase({
       maxIndex + 0.25
     );
 
-    // Simpan kecepatan geseran untuk inersia fleksibel saat jari dilepas (tanpa snap terpaku)
     const instantVel = -(stepDx / sensitivity) / (dtMs / 16.67);
     inertiaVelocityRef.current = THREE.MathUtils.lerp(
       inertiaVelocityRef.current,
@@ -1413,12 +1383,25 @@ export default function Perfume3DShowcase({
 
     dragStateRef.current = null;
     isDraggingRef.current = false;
-    // Tidak memanggil snapToNearest agar posisi botol fleksibel sesuai kekuatan geseran!
   };
 
-  const handleSyncActiveIndex = useCallback((idx: number) => {
-    setActiveIndex(idx);
-  }, []);
+  const fallbackView = (
+    <div className="flex h-full w-full items-center justify-center overflow-x-auto gap-6 px-6">
+      {showcaseItems.map((item) => (
+        <div
+          key={item.id}
+          className="flex flex-col items-center shrink-0 select-none"
+        >
+          <img
+            src={item.fallbackImage}
+            alt={item.displayName || item.mainTitleTop}
+            className="h-64 w-64 rounded-2xl object-cover shadow-sm"
+            loading="lazy"
+          />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <section
@@ -1434,32 +1417,44 @@ export default function Perfume3DShowcase({
         onPointerCancel={handlePointerUp}
         className="relative z-10 h-[480px] sm:h-[560px] md:h-[620px] w-full cursor-grab active:cursor-grabbing touch-pan-y"
       >
-        {mounted ? (
-          <Canvas
-            dpr={[1, 2]}
-            camera={{ position: [0, 0.08, 7.4], fov: 35 }}
-            gl={{
-              antialias: true,
-              alpha: true,
-              powerPreference: "high-performance",
-            }}
-          >
-            <PerfumeCarouselScene
-              items={showcaseItems}
-              activeShadowColor={activeItem.shadowColor}
-              scrollTargetRef={scrollTargetRef}
-              scrollCurrentRef={scrollCurrentRef}
-              scrollVelocityRef={scrollVelocityRef}
-              inertiaVelocityRef={inertiaVelocityRef}
-              isDraggingRef={isDraggingRef}
-              globalUseDecal={useDecal}
-              onSyncActiveIndex={handleSyncActiveIndex}
-            />
-          </Canvas>
+        {canRenderWebGL ? (
+          <WebGLErrorBoundary fallback={fallbackView}>
+            <Canvas
+              dpr={[1, 1.5]}
+              camera={{ position: [0, 0.08, 7.4], fov: 35 }}
+              gl={{
+                antialias: true,
+                alpha: true,
+                powerPreference: "default",
+                stencil: false,
+                depth: true,
+              }}
+              onCreated={({ gl }) => {
+                // Cegah Chrome memblokir domain jika terjadi context loss sementara
+                const canvasEl = gl.domElement;
+                const handleContextLost = (event: Event) => {
+                  event.preventDefault();
+                };
+                canvasEl.addEventListener(
+                  "webglcontextlost",
+                  handleContextLost,
+                  false
+                );
+              }}
+            >
+              <PerfumeCarouselScene
+                items={showcaseItems}
+                scrollTargetRef={scrollTargetRef}
+                scrollCurrentRef={scrollCurrentRef}
+                scrollVelocityRef={scrollVelocityRef}
+                inertiaVelocityRef={inertiaVelocityRef}
+                isDraggingRef={isDraggingRef}
+                globalUseDecal={useDecal}
+              />
+            </Canvas>
+          </WebGLErrorBoundary>
         ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            <div className="h-64 w-44 rounded-3xl bg-neutral-100 animate-pulse" />
-          </div>
+          fallbackView
         )}
       </div>
     </section>
